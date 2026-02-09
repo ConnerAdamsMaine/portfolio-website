@@ -1,0 +1,4 @@
+# allow crawling most pages; keep admin out of search
+User-agent: *
+Disallow: /admin
+Sitemap: /sitemap.xml

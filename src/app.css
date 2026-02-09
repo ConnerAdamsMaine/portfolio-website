@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+	color-scheme: dark;
+	--paper: #0b0c17;
+	--paper-deep: #05050b;
+	--ink: #f3f4f8;
+	--ink-soft: #c0c7e0;
+	--signal: #a47bff;
+	--signal-dark: #7d3bff;
+	--aurora: #5b79ff;
+	--mint: #55b1ff;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	min-height: 100vh;
+	font-family: "Space Grotesk", system-ui, sans-serif;
+	background: radial-gradient(circle at 15% 10%, rgba(91, 121, 255, 0.3), transparent 45%),
+		radial-gradient(circle at 85% 20%, rgba(164, 123, 255, 0.25), transparent 50%),
+		linear-gradient(160deg, #0b0c17 0%, #05050b 100%);
+	color: var(--ink);
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+.section-pad {
+	@apply px-6 py-16 sm:px-10 lg:px-16;
+}
+
+.card {
+	@apply rounded-3xl border border-ink-200/30 bg-white/5 p-6 shadow-soft backdrop-blur-sm;
+}
+
+.badge {
+	@apply inline-flex items-center gap-2 rounded-full border border-ink-200/40 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-ink-200;
+}
+
+.link-underline {
+	@apply inline-flex items-center gap-2 border-b border-ink-400/60 pb-1 text-sm font-semibold uppercase tracking-[0.2em] text-ink-100 transition hover:border-ink-100 hover:text-white;
+}
+
+.nav-pill {
+	@apply rounded-full border border-ink-200/30 bg-white/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-ink-200 transition hover:border-ink-100 hover:text-white;
+}
+
+.nav-pill-active {
+	@apply border-ink-100 bg-ink-900 text-white;
+}
+
+.glass {
+	@apply rounded-3xl border border-white/10 bg-white/10 shadow-soft backdrop-blur-lg;
+}
+
+.skip-link {
+	position: fixed;
+	top: 1.25rem;
+	left: 1.25rem;
+	z-index: 50;
+	padding: 0.75rem 1.25rem;
+	border-radius: 999px;
+	background: var(--ink);
+	color: var(--paper-deep);
+	font-size: 0.7rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.2em;
+	transform: translateY(-200%);
+	transition: transform 200ms ease;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+	transform: translateY(0);
+}
+
+.noise-layer {
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23noiseFilter)' opacity='0.12'/%3E%3C/svg%3E");
+	mix-blend-mode: multiply;
+	pointer-events: none;
+}
