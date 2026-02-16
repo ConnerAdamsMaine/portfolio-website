@@ -9,10 +9,10 @@ const parsePayload = async (request: Request) => {
 	}
 	if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
 		const form = await request.formData();
-		const entries = Object.fromEntries(form.entries());
+		const entries = Object.fromEntries(form.entries()) as Record<string, unknown>;
 		return { data: entries, raw: JSON.stringify(entries) };
 	}
-	return { data: {}, raw: null };
+	return { data: {} as Record<string, unknown>, raw: null };
 };
 
 export const OPTIONS: RequestHandler = () =>

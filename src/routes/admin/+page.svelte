@@ -19,6 +19,7 @@
 		{ label: 'Footer', href: '/admin/footer', detail: 'Footer navigation links.' },
 		{ label: 'Assets', href: '/admin/assets', detail: 'Upload and publish files.' },
 		{ label: 'Tracking', href: '/admin/tracking', detail: 'Metrics and event activity.' },
+		{ label: 'Playground', href: '/admin/playground', detail: 'Manage playsets and live runtime sessions.' },
 		{ label: 'Resume', href: '/admin/resume', detail: 'Upload your PDF resume.' }
 	];
 </script>

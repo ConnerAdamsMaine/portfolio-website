@@ -46,6 +46,7 @@ type StackItem = {
 	id: number;
 	label: string;
 	detail: string | null;
+	category: string | null;
 	sort: number;
 };
 
@@ -58,6 +59,8 @@ type WorkItem = {
 	role: string | null;
 	tech: string | null;
 	link: string | null;
+	imagePath: string | null;
+	imageAlt: string | null;
 	featured: number;
 	sort: number;
 };
@@ -120,6 +123,72 @@ type FooterLink = {
 	sort: number;
 };
 
+type Playset = {
+	id: number;
+	name: string;
+	slug: string;
+	runtime: string;
+	description: string;
+	dockerImage: string;
+	startCommand: string | null;
+	defaultCommand: string | null;
+	enabled: number;
+	maxSessions: number;
+	idleTimeoutSeconds: number;
+	createdAt: string;
+	updatedAt: string;
+};
+
+type PlaygroundSession = {
+	id: number;
+	sessionId: string;
+	playsetId: number;
+	status: string;
+	joinToken: string;
+	containerId: string | null;
+	reason: string | null;
+	clientIp: string | null;
+	userAgent: string | null;
+	createdAt: string;
+	updatedAt: string;
+	endedAt: string | null;
+};
+
+type PlaygroundSocketConnection = {
+	id: number;
+	wsId: string;
+	sessionId: string;
+	connectedAt: string;
+	disconnectedAt: string | null;
+	closeCode: number | null;
+	closeReason: string | null;
+};
+
+type PlaygroundLog = {
+	id: number;
+	sessionId: string;
+	wsId: string | null;
+	level: string;
+	event: string;
+	message: string;
+	payload: string | null;
+	createdAt: string;
+};
+
+type PlaygroundSessionListItem = PlaygroundSession & {
+	playsetName: string;
+	playsetSlug: string;
+	playsetRuntime: string;
+};
+
+type PlaygroundOperationalCounts = {
+	totalSessions: number;
+	activeSessions: number;
+	failedSessions: number;
+	activeSocketConnections: number;
+	totalLogs: number;
+};
+
 const DEFAULT_DB_PATH = 'data/portfolio.sqlite';
 let db: Database.Database | null = null;
 let dbInitialized = false;
@@ -138,7 +207,8 @@ const cache = {
 	posts: null as CacheEntry<BlogPost[]> | null,
 	assets: null as CacheEntry<Asset[]> | null,
 	testimonials: null as CacheEntry<Testimonial[]> | null,
-	footerLinks: null as CacheEntry<FooterLink[]> | null
+	footerLinks: null as CacheEntry<FooterLink[]> | null,
+	playsets: null as CacheEntry<Playset[]> | null
 };
 
 const getCached = <T>(entry: CacheEntry<T> | null) => {
@@ -147,8 +217,11 @@ const getCached = <T>(entry: CacheEntry<T> | null) => {
 	return entry.data;
 };
 
-const setCache = <T>(key: keyof typeof cache, data: T) => {
-	cache[key] = { data, fetchedAt: Date.now() } as CacheEntry<T>;
+type CacheData<K extends keyof typeof cache> =
+	(typeof cache)[K] extends CacheEntry<infer T> | null ? T : never;
+
+const setCache = <K extends keyof typeof cache>(key: K, data: CacheData<K>) => {
+	cache[key] = { data, fetchedAt: Date.now() } as (typeof cache)[K];
 };
 
 const clearCache = (...keys: (keyof typeof cache)[]) => {
@@ -216,6 +289,7 @@ const createTables = (database: Database.Database) => {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			label TEXT NOT NULL,
 			detail TEXT,
+			category TEXT,
 			sort INTEGER DEFAULT 0
 		);
 
@@ -228,6 +302,8 @@ const createTables = (database: Database.Database) => {
 			role TEXT,
 			tech TEXT,
 			link TEXT,
+			image_path TEXT,
+			image_alt TEXT,
 			featured INTEGER DEFAULT 0,
 			sort INTEGER DEFAULT 0
 		);
@@ -289,6 +365,77 @@ const createTables = (database: Database.Database) => {
 			external INTEGER DEFAULT 0,
 			sort INTEGER DEFAULT 0
 		);
+
+		CREATE TABLE IF NOT EXISTS playsets (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			slug TEXT NOT NULL UNIQUE,
+			runtime TEXT NOT NULL,
+			description TEXT NOT NULL,
+			docker_image TEXT NOT NULL,
+			start_command TEXT,
+			default_command TEXT,
+			artifact_type TEXT NOT NULL DEFAULT 'generic',
+			artifact_path TEXT NOT NULL DEFAULT '',
+			extracted_path TEXT NOT NULL DEFAULT '',
+			compose_path TEXT,
+			verify_status TEXT NOT NULL DEFAULT 'pending',
+			verify_log TEXT,
+			last_verified_at TEXT,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			max_sessions INTEGER NOT NULL DEFAULT 5,
+			idle_timeout_seconds INTEGER NOT NULL DEFAULT 900,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS playground_sessions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT NOT NULL UNIQUE,
+			playset_id INTEGER NOT NULL,
+			status TEXT NOT NULL,
+			join_token TEXT NOT NULL,
+			container_id TEXT,
+			reason TEXT,
+			client_ip TEXT,
+			user_agent TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			ended_at TEXT,
+			FOREIGN KEY (playset_id) REFERENCES playsets(id) ON DELETE CASCADE
+		);
+
+		CREATE TABLE IF NOT EXISTS playground_socket_connections (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			ws_id TEXT NOT NULL UNIQUE,
+			session_id TEXT NOT NULL,
+			connected_at TEXT NOT NULL,
+			disconnected_at TEXT,
+			close_code INTEGER,
+			close_reason TEXT,
+			FOREIGN KEY (session_id) REFERENCES playground_sessions(session_id) ON DELETE CASCADE
+		);
+
+		CREATE TABLE IF NOT EXISTS playground_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT NOT NULL,
+			ws_id TEXT,
+			level TEXT NOT NULL,
+			event TEXT NOT NULL,
+			message TEXT NOT NULL,
+			payload TEXT,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (session_id) REFERENCES playground_sessions(session_id) ON DELETE CASCADE
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_playground_sessions_status
+			ON playground_sessions(status, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_playground_sessions_playset
+			ON playground_sessions(playset_id, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_playground_socket_connections_session
+			ON playground_socket_connections(session_id, connected_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_playground_logs_session
+			ON playground_logs(session_id, created_at DESC);
 	`);
 };
 
@@ -336,6 +483,8 @@ const ensureWorkItemsColumns = (database: Database.Database) => {
 
 	ensureColumn('long_description', 'TEXT');
 	ensureColumn('highlights', 'TEXT');
+	ensureColumn('image_path', 'TEXT');
+	ensureColumn('image_alt', 'TEXT');
 };
 
 const ensurePostsColumns = (database: Database.Database) => {
@@ -345,6 +494,16 @@ const ensurePostsColumns = (database: Database.Database) => {
 
 	if (!columns.includes('draft')) {
 		database.exec('ALTER TABLE posts ADD COLUMN draft INTEGER NOT NULL DEFAULT 0');
+	}
+};
+
+const ensureStackItemsColumns = (database: Database.Database) => {
+	const columns = (
+		database.prepare('PRAGMA table_info(stack_items)').all() as { name: string }[]
+	).map((column) => column.name);
+
+	if (!columns.includes('category')) {
+		database.exec('ALTER TABLE stack_items ADD COLUMN category TEXT');
 	}
 };
 
@@ -394,6 +553,153 @@ const ensureTrackingTable = (database: Database.Database) => {
 			created_at TEXT NOT NULL
 		);
 	`);
+};
+
+const ensurePlaygroundTables = (database: Database.Database) => {
+	database.exec(`
+		CREATE TABLE IF NOT EXISTS playsets (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			slug TEXT NOT NULL UNIQUE,
+			runtime TEXT NOT NULL,
+			description TEXT NOT NULL,
+			docker_image TEXT NOT NULL,
+			start_command TEXT,
+			default_command TEXT,
+			artifact_type TEXT NOT NULL DEFAULT 'generic',
+			artifact_path TEXT NOT NULL DEFAULT '',
+			extracted_path TEXT NOT NULL DEFAULT '',
+			compose_path TEXT,
+			verify_status TEXT NOT NULL DEFAULT 'pending',
+			verify_log TEXT,
+			last_verified_at TEXT,
+			enabled INTEGER NOT NULL DEFAULT 1,
+			max_sessions INTEGER NOT NULL DEFAULT 5,
+			idle_timeout_seconds INTEGER NOT NULL DEFAULT 900,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS playground_sessions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT NOT NULL UNIQUE,
+			playset_id INTEGER NOT NULL,
+			status TEXT NOT NULL,
+			join_token TEXT NOT NULL,
+			container_id TEXT,
+			reason TEXT,
+			client_ip TEXT,
+			user_agent TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			ended_at TEXT,
+			FOREIGN KEY (playset_id) REFERENCES playsets(id) ON DELETE CASCADE
+		);
+
+		CREATE TABLE IF NOT EXISTS playground_socket_connections (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			ws_id TEXT NOT NULL UNIQUE,
+			session_id TEXT NOT NULL,
+			connected_at TEXT NOT NULL,
+			disconnected_at TEXT,
+			close_code INTEGER,
+			close_reason TEXT,
+			FOREIGN KEY (session_id) REFERENCES playground_sessions(session_id) ON DELETE CASCADE
+		);
+
+		CREATE TABLE IF NOT EXISTS playground_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT NOT NULL,
+			ws_id TEXT,
+			level TEXT NOT NULL,
+			event TEXT NOT NULL,
+			message TEXT NOT NULL,
+			payload TEXT,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY (session_id) REFERENCES playground_sessions(session_id) ON DELETE CASCADE
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_playground_sessions_status
+			ON playground_sessions(status, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_playground_sessions_playset
+			ON playground_sessions(playset_id, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_playground_socket_connections_session
+			ON playground_socket_connections(session_id, connected_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_playground_logs_session
+			ON playground_logs(session_id, created_at DESC);
+	`);
+};
+
+const ensurePlaysetColumnsCompatibility = (database: Database.Database) => {
+	const tables = database
+		.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='playsets'")
+		.all() as { name: string }[];
+	if (tables.length === 0) return;
+
+	const columns = (
+		database.prepare('PRAGMA table_info(playsets)').all() as { name: string }[]
+	).map((column) => column.name);
+
+	const ensureColumn = (name: string, definition: string) => {
+		if (!columns.includes(name)) {
+			database.exec(`ALTER TABLE playsets ADD COLUMN ${name} ${definition}`);
+		}
+	};
+
+	ensureColumn('runtime', "TEXT NOT NULL DEFAULT 'generic'");
+	ensureColumn('docker_image', "TEXT NOT NULL DEFAULT 'alpine:latest'");
+	ensureColumn('start_command', 'TEXT');
+	ensureColumn('default_command', 'TEXT');
+	ensureColumn('max_sessions', 'INTEGER NOT NULL DEFAULT 5');
+	ensureColumn('idle_timeout_seconds', 'INTEGER NOT NULL DEFAULT 900');
+
+	// Compatibility with older playset schema variants.
+	ensureColumn('artifact_type', "TEXT NOT NULL DEFAULT 'generic'");
+	ensureColumn('artifact_path', "TEXT NOT NULL DEFAULT ''");
+	ensureColumn('extracted_path', "TEXT NOT NULL DEFAULT ''");
+	ensureColumn('compose_path', 'TEXT');
+	ensureColumn('verify_status', "TEXT NOT NULL DEFAULT 'pending'");
+	ensureColumn('verify_log', 'TEXT');
+	ensureColumn('last_verified_at', 'TEXT');
+
+	database
+		.prepare(
+			`
+			UPDATE playsets
+			SET
+				runtime = CASE
+					WHEN runtime IS NULL OR runtime = '' THEN COALESCE(NULLIF(artifact_type, ''), 'generic')
+					ELSE runtime
+				END,
+				docker_image = CASE
+					WHEN docker_image IS NULL OR docker_image = '' THEN COALESCE(NULLIF(artifact_path, ''), 'alpine:latest')
+					ELSE docker_image
+				END,
+				description = COALESCE(description, ''),
+				max_sessions = CASE
+					WHEN max_sessions IS NULL OR max_sessions < 1 THEN 5
+					ELSE max_sessions
+				END,
+				idle_timeout_seconds = CASE
+					WHEN idle_timeout_seconds IS NULL OR idle_timeout_seconds < 30 THEN 900
+					ELSE idle_timeout_seconds
+				END,
+				artifact_type = CASE
+					WHEN artifact_type IS NULL OR artifact_type = '' THEN runtime
+					ELSE artifact_type
+				END,
+				artifact_path = CASE
+					WHEN artifact_path IS NULL OR artifact_path = '' THEN docker_image
+					ELSE artifact_path
+				END,
+				extracted_path = COALESCE(extracted_path, ''),
+				verify_status = CASE
+					WHEN verify_status IS NULL OR verify_status = '' THEN 'pending'
+					ELSE verify_status
+				END
+		`
+		)
+		.run();
 };
 
 const seedDefaults = (database: Database.Database) => {
@@ -527,6 +833,90 @@ const seedFooterLinks = (database: Database.Database) => {
 	}
 };
 
+const seedPlaysets = (database: Database.Database) => {
+	ensurePlaysetColumnsCompatibility(database);
+
+	const existing = database.prepare('SELECT COUNT(*) as count FROM playsets').get() as {
+		count: number;
+	};
+
+	if (existing.count > 0) {
+		return;
+	}
+
+	const now = new Date().toISOString();
+	const rows = [
+		{
+			name: 'Node.js Shell',
+			slug: 'node-shell',
+			runtime: 'node',
+			description: 'Run Node commands and scripts inside an isolated container.',
+			dockerImage: 'node:22-alpine',
+			startCommand: 'tail -f /dev/null',
+			defaultCommand: 'node -v',
+			enabled: 1,
+			maxSessions: 6,
+			idleTimeoutSeconds: 900
+		},
+		{
+			name: 'Python Shell',
+			slug: 'python-shell',
+			runtime: 'python',
+			description: 'Execute Python scripts in a disposable environment.',
+			dockerImage: 'python:3.12-alpine',
+			startCommand: 'tail -f /dev/null',
+			defaultCommand: 'python --version',
+			enabled: 1,
+			maxSessions: 6,
+			idleTimeoutSeconds: 900
+		},
+		{
+			name: 'Rust Shell',
+			slug: 'rust-shell',
+			runtime: 'rust',
+			description: 'Compile and run Rust snippets from an isolated toolchain container.',
+			dockerImage: 'rust:1.83-alpine3.20',
+			startCommand: 'tail -f /dev/null',
+			defaultCommand: 'rustc --version',
+			enabled: 1,
+			maxSessions: 4,
+			idleTimeoutSeconds: 1200
+		}
+	];
+
+	const insert = database.prepare(
+		`INSERT INTO playsets (
+			name, slug, runtime, description, docker_image, start_command, default_command,
+			artifact_type, artifact_path, extracted_path, compose_path, verify_status, verify_log, last_verified_at,
+			enabled, max_sessions, idle_timeout_seconds, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	);
+
+	for (const row of rows) {
+		insert.run(
+			row.name,
+			row.slug,
+			row.runtime,
+			row.description,
+			row.dockerImage,
+			row.startCommand,
+			row.defaultCommand,
+			row.runtime,
+			row.dockerImage,
+			'',
+			null,
+			'pending',
+			null,
+			null,
+			row.enabled,
+			row.maxSessions,
+			row.idleTimeoutSeconds,
+			now,
+			now
+		);
+	}
+};
+
 const ensureDefaultsForExistingRow = (database: Database.Database) => {
 	database
 		.prepare(
@@ -627,9 +1017,11 @@ const runMigrations = (database: Database.Database) => {
 	`);
 
 	const applied = database
-		.prepare('SELECT id FROM migrations ORDER BY id ASC')
-		.all() as { id: number }[];
+		.prepare('SELECT id, name FROM migrations ORDER BY id ASC')
+		.all() as { id: number; name: string }[];
 	const appliedIds = new Set(applied.map((row) => row.id));
+	const appliedNames = new Set(applied.map((row) => row.name));
+	let nextId = applied.reduce((max, row) => Math.max(max, row.id), 0) + 1;
 
 	const migrations: Migration[] = [
 		{ id: 1, name: 'init', up: createTables },
@@ -645,15 +1037,25 @@ const runMigrations = (database: Database.Database) => {
 		{ id: 11, name: 'site_settings_footer_columns', up: ensureSiteSettingsColumns },
 		{ id: 12, name: 'site_settings_footer_defaults', up: ensureDefaultsForExistingRow },
 		{ id: 13, name: 'site_settings_maintenance_columns', up: ensureSiteSettingsColumns },
-		{ id: 14, name: 'site_settings_maintenance_defaults', up: ensureDefaultsForExistingRow }
+		{ id: 14, name: 'site_settings_maintenance_defaults', up: ensureDefaultsForExistingRow },
+		{ id: 15, name: 'stack_items_category_column', up: ensureStackItemsColumns },
+		{ id: 16, name: 'playground_tables', up: ensurePlaygroundTables },
+		{ id: 17, name: 'playground_seed_playsets', up: seedPlaysets },
+		{ id: 18, name: 'playset_columns_compat', up: ensurePlaysetColumnsCompatibility },
+		{ id: 19, name: 'work_items_media_columns', up: ensureWorkItemsColumns }
 	];
 
 	for (const migration of migrations) {
-		if (appliedIds.has(migration.id)) continue;
+		if (appliedNames.has(migration.name)) continue;
+
 		migration.up(database);
+		const recordId = appliedIds.has(migration.id) ? nextId++ : migration.id;
+
 		database
 			.prepare('INSERT INTO migrations (id, name, applied_at) VALUES (?, ?, ?)')
-			.run(migration.id, migration.name, new Date().toISOString());
+			.run(recordId, migration.name, new Date().toISOString());
+		appliedIds.add(recordId);
+		appliedNames.add(migration.name);
 	}
 };
 
@@ -673,6 +1075,7 @@ const bootstrapDb = (database: Database.Database) => {
 	runMigrations(database);
 	seedDefaults(database);
 	seedFooterLinks(database);
+	seedPlaysets(database);
 };
 
 const assertSchemaReady = (database: Database.Database) => {
@@ -687,11 +1090,17 @@ const assertSchemaReady = (database: Database.Database) => {
 export const getDb = () => {
 	const database = openDb();
 	if (!dbInitialized) {
-		if (shouldAutoSeed) {
-			bootstrapDb(database);
-		} else {
+		if (!shouldAutoSeed) {
 			assertSchemaReady(database);
 		}
+
+		runMigrations(database);
+		if (shouldAutoSeed) {
+			seedDefaults(database);
+			seedFooterLinks(database);
+			seedPlaysets(database);
+		}
+
 		dbInitialized = true;
 	}
 	return database;
@@ -709,7 +1118,8 @@ export const seedDatabase = () => {
 		'posts',
 		'assets',
 		'testimonials',
-		'footerLinks'
+		'footerLinks',
+		'playsets'
 	);
 };
 
@@ -823,28 +1233,67 @@ export const getStackItems = () => {
 	if (cached) return cached;
 	const database = getDb();
 	const rows = database
-		.prepare('SELECT id, label, detail, sort FROM stack_items ORDER BY sort ASC, id DESC')
+		.prepare(
+			'SELECT id, label, detail, category, sort FROM stack_items ORDER BY sort ASC, id DESC'
+		)
 		.all() as StackItem[];
 
 	setCache('stackItems', rows);
 	return rows;
 };
 
-export const createStackItem = (label: string, detail: string | null, sort: number) => {
+export const createStackItem = (
+	label: string,
+	detail: string | null,
+	category: string | null,
+	sort: number
+) => {
 	const database = getDb();
 	database
-		.prepare('INSERT INTO stack_items (label, detail, sort) VALUES (?, ?, ?)')
-		.run(label, detail, sort);
+		.prepare('INSERT INTO stack_items (label, detail, category, sort) VALUES (?, ?, ?, ?)')
+		.run(label, detail, category, sort);
 
 	clearCache('stackItems');
 };
 
-export const updateStackItem = (id: number, label: string, detail: string | null, sort: number) => {
+export const updateStackItem = (
+	id: number,
+	label: string,
+	detail: string | null,
+	category: string | null,
+	sort: number
+) => {
 	const database = getDb();
 	database
-		.prepare('UPDATE stack_items SET label = ?, detail = ?, sort = ? WHERE id = ?')
-		.run(label, detail, sort, id);
+		.prepare('UPDATE stack_items SET label = ?, detail = ?, category = ?, sort = ? WHERE id = ?')
+		.run(label, detail, category, sort, id);
 
+	clearCache('stackItems');
+};
+
+export const reorderStackItems = (orderedIds: number[]) => {
+	const database = getDb();
+	const currentIds = database
+		.prepare('SELECT id FROM stack_items ORDER BY sort ASC, id DESC')
+		.all() as { id: number }[];
+
+	if (currentIds.length === 0) {
+		return;
+	}
+
+	const known = new Set(currentIds.map((row) => row.id));
+	const deduped = Array.from(new Set(orderedIds.filter((id) => known.has(id))));
+	const missing = currentIds.map((row) => row.id).filter((id) => !deduped.includes(id));
+	const finalOrder = [...deduped, ...missing];
+
+	const update = database.prepare('UPDATE stack_items SET sort = ? WHERE id = ?');
+	const tx = database.transaction((ids: number[]) => {
+		for (let index = 0; index < ids.length; index += 1) {
+			update.run((index + 1) * 10, ids[index]);
+		}
+	});
+
+	tx(finalOrder);
 	clearCache('stackItems');
 };
 
@@ -861,7 +1310,8 @@ export const getWorkItems = () => {
 	const database = getDb();
 	const rows = database
 		.prepare(
-			`SELECT id, title, description, long_description as longDescription, highlights, role, tech, link, featured, sort
+			`SELECT id, title, description, long_description as longDescription, highlights, role, tech, link,
+			 image_path as imagePath, image_alt as imageAlt, featured, sort
 			 FROM work_items
 			 ORDER BY sort ASC, id DESC`
 		)
@@ -877,13 +1327,14 @@ export const getFeaturedWork = () => {
 	const workItems = getCached(cache.workItems);
 	const rows = workItems
 		? workItems.filter((item) => item.featured === 1)
-		: (getDb()
-				.prepare(
-					`SELECT id, title, description, long_description as longDescription, highlights, role, tech, link, featured, sort
-					 FROM work_items
-					 WHERE featured = 1
-					 ORDER BY sort ASC, id DESC`
-				)
+			: (getDb()
+					.prepare(
+						`SELECT id, title, description, long_description as longDescription, highlights, role, tech, link,
+						 image_path as imagePath, image_alt as imageAlt, featured, sort
+						 FROM work_items
+						 WHERE featured = 1
+						 ORDER BY sort ASC, id DESC`
+					)
 				.all() as WorkItem[]);
 
 	setCache('featuredWork', rows);
@@ -898,16 +1349,31 @@ export const createWorkItem = (
 	role: string | null,
 	tech: string | null,
 	link: string | null,
+	imagePath: string | null,
+	imageAlt: string | null,
 	featured: number,
 	sort: number
 ) => {
 	const database = getDb();
 	database
 		.prepare(
-			`INSERT INTO work_items (title, description, long_description, highlights, role, tech, link, featured, sort)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			`INSERT INTO work_items (
+				title, description, long_description, highlights, role, tech, link, image_path, image_alt, featured, sort
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		)
-		.run(title, description, longDescription, highlights, role, tech, link, featured, sort);
+		.run(
+			title,
+			description,
+			longDescription,
+			highlights,
+			role,
+			tech,
+			link,
+			imagePath,
+			imageAlt,
+			featured,
+			sort
+		);
 
 	clearCache('workItems', 'featuredWork');
 };
@@ -921,6 +1387,8 @@ export const updateWorkItem = (
 	role: string | null,
 	tech: string | null,
 	link: string | null,
+	imagePath: string | null,
+	imageAlt: string | null,
 	featured: number,
 	sort: number
 ) => {
@@ -928,10 +1396,24 @@ export const updateWorkItem = (
 	database
 		.prepare(
 			`UPDATE work_items
-			 SET title = ?, description = ?, long_description = ?, highlights = ?, role = ?, tech = ?, link = ?, featured = ?, sort = ?
+			 SET title = ?, description = ?, long_description = ?, highlights = ?, role = ?, tech = ?, link = ?,
+				 image_path = ?, image_alt = ?, featured = ?, sort = ?
 			 WHERE id = ?`
 		)
-		.run(title, description, longDescription, highlights, role, tech, link, featured, sort, id);
+		.run(
+			title,
+			description,
+			longDescription,
+			highlights,
+			role,
+			tech,
+			link,
+			imagePath,
+			imageAlt,
+			featured,
+			sort,
+			id
+		);
 
 	clearCache('workItems', 'featuredWork');
 };
@@ -1348,6 +1830,349 @@ export const deleteFooterLink = (id: number) => {
 	clearCache('footerLinks');
 };
 
+const slugifyPlayset = (value: string) =>
+	value
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/(^-|-$)+/g, '');
+
+const ensureUniquePlaysetSlug = (database: Database.Database, slug: string, currentId?: number) => {
+	const base = slug || 'playset';
+	let candidate = base;
+	let suffix = 1;
+	while (true) {
+		const existing = database
+			.prepare('SELECT id FROM playsets WHERE slug = ?')
+			.get(candidate) as { id: number } | undefined;
+		if (!existing || (currentId && existing.id === currentId)) {
+			return candidate;
+		}
+		candidate = `${base}-${suffix}`;
+		suffix += 1;
+	}
+};
+
+export const getPlaysets = () => {
+	const cached = getCached(cache.playsets);
+	if (cached) return cached;
+	const database = getDb();
+	const rows = database
+		.prepare(
+			`SELECT
+				id, name, slug, runtime, COALESCE(description, '') as description, docker_image as dockerImage,
+				start_command as startCommand, default_command as defaultCommand,
+				enabled, max_sessions as maxSessions, idle_timeout_seconds as idleTimeoutSeconds,
+				created_at as createdAt, updated_at as updatedAt
+			FROM playsets
+			ORDER BY enabled DESC, name ASC`
+		)
+		.all() as Playset[];
+	setCache('playsets', rows);
+	return rows;
+};
+
+export const getEnabledPlaysets = () => getPlaysets().filter((playset) => playset.enabled === 1);
+
+export const getPlaysetById = (id: number) => getPlaysets().find((playset) => playset.id === id);
+
+export const getPlaysetBySlug = (slug: string) => getPlaysets().find((playset) => playset.slug === slug);
+
+export const createPlayset = (
+	name: string,
+	runtime: string,
+	description: string,
+	dockerImage: string,
+	startCommand: string | null,
+	defaultCommand: string | null,
+	enabled: number,
+	maxSessions: number,
+	idleTimeoutSeconds: number,
+	slug?: string
+) => {
+	const database = getDb();
+	const now = new Date().toISOString();
+	const baseSlug = slug && slug.length > 0 ? slugifyPlayset(slug) : slugifyPlayset(name);
+	const finalSlug = ensureUniquePlaysetSlug(database, baseSlug);
+	database
+		.prepare(
+			`INSERT INTO playsets (
+				name, slug, runtime, description, docker_image, start_command, default_command,
+				artifact_type, artifact_path, extracted_path, compose_path, verify_status, verify_log, last_verified_at,
+				enabled, max_sessions, idle_timeout_seconds, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		)
+		.run(
+			name,
+			finalSlug,
+			runtime,
+			description,
+			dockerImage,
+			startCommand,
+			defaultCommand,
+			runtime,
+			dockerImage,
+			'',
+			null,
+			'pending',
+			null,
+			null,
+			enabled,
+			maxSessions,
+			idleTimeoutSeconds,
+			now,
+			now
+		);
+	clearCache('playsets');
+};
+
+export const updatePlayset = (
+	id: number,
+	name: string,
+	runtime: string,
+	description: string,
+	dockerImage: string,
+	startCommand: string | null,
+	defaultCommand: string | null,
+	enabled: number,
+	maxSessions: number,
+	idleTimeoutSeconds: number,
+	slug?: string
+) => {
+	const database = getDb();
+	const now = new Date().toISOString();
+	const baseSlug = slug && slug.length > 0 ? slugifyPlayset(slug) : slugifyPlayset(name);
+	const finalSlug = ensureUniquePlaysetSlug(database, baseSlug, id);
+	database
+		.prepare(
+			`UPDATE playsets
+			 SET name = ?, slug = ?, runtime = ?, description = ?, docker_image = ?, start_command = ?,
+				 default_command = ?, artifact_type = ?, artifact_path = ?, enabled = ?, max_sessions = ?,
+				 idle_timeout_seconds = ?, updated_at = ?
+			 WHERE id = ?`
+		)
+		.run(
+			name,
+			finalSlug,
+			runtime,
+			description,
+			dockerImage,
+			startCommand,
+			defaultCommand,
+			runtime,
+			dockerImage,
+			enabled,
+			maxSessions,
+			idleTimeoutSeconds,
+			now,
+			id
+		);
+	clearCache('playsets');
+};
+
+export const deletePlayset = (id: number) => {
+	const database = getDb();
+	database.prepare('DELETE FROM playsets WHERE id = ?').run(id);
+	clearCache('playsets');
+};
+
+export const countActivePlaygroundSessionsForPlayset = (playsetId: number) => {
+	const database = getDb();
+	const row = database
+		.prepare(
+			`SELECT COUNT(*) as count
+			 FROM playground_sessions
+			 WHERE playset_id = ? AND status IN ('starting', 'active')`
+		)
+		.get(playsetId) as { count: number };
+	return row.count;
+};
+
+export const createPlaygroundSession = (
+	sessionId: string,
+	playsetId: number,
+	joinToken: string,
+	clientIp: string | null,
+	userAgent: string | null,
+	status = 'starting'
+) => {
+	const database = getDb();
+	const now = new Date().toISOString();
+	database
+		.prepare(
+			`INSERT INTO playground_sessions (
+				session_id, playset_id, status, join_token, container_id, reason, client_ip, user_agent,
+				created_at, updated_at, ended_at
+			) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL)`
+		)
+		.run(sessionId, playsetId, status, joinToken, clientIp, userAgent, now, now);
+};
+
+export const getPlaygroundSessionBySessionId = (sessionId: string) => {
+	const database = getDb();
+	return database
+		.prepare(
+			`SELECT
+				id, session_id as sessionId, playset_id as playsetId, status, join_token as joinToken,
+				container_id as containerId, reason, client_ip as clientIp, user_agent as userAgent,
+				created_at as createdAt, updated_at as updatedAt, ended_at as endedAt
+			FROM playground_sessions
+			WHERE session_id = ?`
+		)
+		.get(sessionId) as PlaygroundSession | undefined;
+};
+
+export const updatePlaygroundSessionStatus = (
+	sessionId: string,
+	status: string,
+	options?: { containerId?: string | null; reason?: string | null; ended?: boolean }
+) => {
+	const database = getDb();
+	const now = new Date().toISOString();
+	const current = getPlaygroundSessionBySessionId(sessionId);
+	if (!current) return;
+	const endedAt = options?.ended ? now : current.endedAt;
+	const nextContainerId =
+		options?.containerId === undefined ? current.containerId : options.containerId;
+	const nextReason = options?.reason === undefined ? current.reason : options.reason;
+	database
+		.prepare(
+			`UPDATE playground_sessions
+			 SET status = ?, container_id = ?, reason = ?, updated_at = ?, ended_at = ?
+			 WHERE session_id = ?`
+		)
+		.run(status, nextContainerId, nextReason, now, endedAt, sessionId);
+};
+
+export const createPlaygroundSocketConnection = (wsId: string, sessionId: string) => {
+	const database = getDb();
+	const now = new Date().toISOString();
+	database
+		.prepare(
+			`INSERT INTO playground_socket_connections (
+				ws_id, session_id, connected_at, disconnected_at, close_code, close_reason
+			) VALUES (?, ?, ?, NULL, NULL, NULL)`
+		)
+		.run(wsId, sessionId, now);
+};
+
+export const closePlaygroundSocketConnection = (
+	wsId: string,
+	closeCode: number | null,
+	closeReason: string | null
+) => {
+	const database = getDb();
+	const now = new Date().toISOString();
+	database
+		.prepare(
+			`UPDATE playground_socket_connections
+			 SET disconnected_at = ?, close_code = ?, close_reason = ?
+			 WHERE ws_id = ?`
+		)
+		.run(now, closeCode, closeReason, wsId);
+};
+
+export const createPlaygroundLog = (
+	sessionId: string,
+	wsId: string | null,
+	level: string,
+	event: string,
+	message: string,
+	payload: string | null = null
+) => {
+	const database = getDb();
+	const now = new Date().toISOString();
+	database
+		.prepare(
+			`INSERT INTO playground_logs (session_id, ws_id, level, event, message, payload, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`
+		)
+		.run(sessionId, wsId, level, event, message, payload, now);
+};
+
+export const getPlaygroundLogsBySession = (sessionId: string, limit = 200) => {
+	const database = getDb();
+	return database
+		.prepare(
+			`SELECT
+				id, session_id as sessionId, ws_id as wsId, level, event, message, payload, created_at as createdAt
+			FROM playground_logs
+			WHERE session_id = ?
+			ORDER BY id DESC
+			LIMIT ?`
+		)
+		.all(sessionId, limit) as PlaygroundLog[];
+};
+
+export const getRecentPlaygroundLogs = (limit = 200) => {
+	const database = getDb();
+	return database
+		.prepare(
+			`SELECT
+				id, session_id as sessionId, ws_id as wsId, level, event, message, payload, created_at as createdAt
+			FROM playground_logs
+			ORDER BY id DESC
+			LIMIT ?`
+		)
+		.all(limit) as PlaygroundLog[];
+};
+
+export const getRecentPlaygroundSessions = (limit = 200) => {
+	const database = getDb();
+	return database
+		.prepare(
+			`SELECT
+				s.id, s.session_id as sessionId, s.playset_id as playsetId, s.status, s.join_token as joinToken,
+				s.container_id as containerId, s.reason, s.client_ip as clientIp, s.user_agent as userAgent,
+				s.created_at as createdAt, s.updated_at as updatedAt, s.ended_at as endedAt,
+				p.name as playsetName, p.slug as playsetSlug, p.runtime as playsetRuntime
+			FROM playground_sessions s
+			INNER JOIN playsets p ON p.id = s.playset_id
+			ORDER BY s.created_at DESC, s.id DESC
+			LIMIT ?`
+		)
+		.all(limit) as PlaygroundSessionListItem[];
+};
+
+export const getPlaygroundOperationalCounts = () => {
+	const database = getDb();
+	const totalSessions = database.prepare('SELECT COUNT(*) as count FROM playground_sessions').get() as {
+		count: number;
+	};
+	const activeSessions = database
+		.prepare(
+			`SELECT COUNT(*) as count
+			 FROM playground_sessions
+			 WHERE status IN ('starting', 'active')`
+		)
+		.get() as { count: number };
+	const failedSessions = database
+		.prepare(
+			`SELECT COUNT(*) as count
+			 FROM playground_sessions
+			 WHERE status = 'failed'`
+		)
+		.get() as { count: number };
+	const activeSocketConnections = database
+		.prepare(
+			`SELECT COUNT(*) as count
+			 FROM playground_socket_connections
+			 WHERE disconnected_at IS NULL`
+		)
+		.get() as { count: number };
+	const totalLogs = database.prepare('SELECT COUNT(*) as count FROM playground_logs').get() as {
+		count: number;
+	};
+
+	return {
+		totalSessions: totalSessions.count,
+		activeSessions: activeSessions.count,
+		failedSessions: failedSessions.count,
+		activeSocketConnections: activeSocketConnections.count,
+		totalLogs: totalLogs.count
+	} as PlaygroundOperationalCounts;
+};
+
 export type {
 	SiteSettings,
 	StackItem,
@@ -1356,5 +2181,11 @@ export type {
 	Asset,
 	Testimonial,
 	TrackingEvent,
-	FooterLink
+	FooterLink,
+	Playset,
+	PlaygroundSession,
+	PlaygroundSessionListItem,
+	PlaygroundSocketConnection,
+	PlaygroundLog,
+	PlaygroundOperationalCounts
 };

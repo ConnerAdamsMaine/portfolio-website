@@ -1,5 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
 	getSiteSettings,
 	updateSiteSettings,
@@ -18,8 +20,19 @@ const MAX_LENGTHS = {
 	highlights: 600,
 	role: 80,
 	tech: 80,
-	link: 2048
+	link: 2048,
+	imageAlt: 180
 };
+
+const WORK_MEDIA_DIR = path.resolve('static/assets/work');
+const ALLOWED_IMAGE_MIME = new Set([
+	'image/jpeg',
+	'image/png',
+	'image/webp',
+	'image/gif',
+	'image/avif'
+]);
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 const parseNumber = (value: FormDataEntryValue | null, fallback = 0) => {
 	if (typeof value !== 'string') return fallback;
@@ -51,6 +64,40 @@ const ensureMaxLength = (value: string, max: number, label: string) =>
 
 const ensureOptionalMaxLength = (value: string | null, max: number, label: string) =>
 	value ? ensureMaxLength(value, max, label) : null;
+
+const sanitizeFilename = (value: string) =>
+	value
+		.toLowerCase()
+		.replace(/\s+/g, '-')
+		.replace(/[^a-z0-9._-]/g, '')
+		.replace(/^-+|-+$/g, '') || 'work-image';
+
+const parseImageFile = (value: FormDataEntryValue | null) => {
+	if (!(value instanceof File)) return null;
+	if (!value.name || value.size <= 0) return null;
+	return value;
+};
+
+const saveWorkImage = async (file: File) => {
+	const original = path.basename(file.name);
+	const safeName = sanitizeFilename(original);
+	const filename = `${Date.now()}-${safeName}`;
+	fs.mkdirSync(WORK_MEDIA_DIR, { recursive: true });
+	const buffer = Buffer.from(await file.arrayBuffer());
+	const fullPath = path.join(WORK_MEDIA_DIR, filename);
+	fs.writeFileSync(fullPath, buffer);
+	return `/assets/work/${filename}`;
+};
+
+const deleteWorkImage = (publicPath: string | null) => {
+	if (!publicPath) return;
+	const staticRoot = path.resolve('static');
+	const resolved = path.resolve(staticRoot, publicPath.replace(/^\/+/, ''));
+	if (!resolved.startsWith(WORK_MEDIA_DIR)) return;
+	if (fs.existsSync(resolved)) {
+		fs.unlinkSync(resolved);
+	}
+};
 
 export const load: PageServerLoad = async (event) => {
 	requireAdmin(event);
@@ -91,6 +138,8 @@ export const actions: Actions = {
 		const role = parseText(data.get('role'));
 		const tech = parseText(data.get('tech'));
 		const linkRaw = parseText(data.get('link'));
+		const imageAlt = parseText(data.get('imageAlt'));
+		const imageFile = parseImageFile(data.get('image'));
 		const errors: Record<string, string> = {};
 
 		if (!title) errors.title = 'Title is required.';
@@ -107,13 +156,23 @@ export const actions: Actions = {
 		if (roleError) errors.role = roleError;
 		const techError = ensureOptionalMaxLength(tech, MAX_LENGTHS.tech, 'Tech');
 		if (techError) errors.tech = techError;
+		const imageAltError = ensureOptionalMaxLength(imageAlt, MAX_LENGTHS.imageAlt, 'Image alt');
+		if (imageAltError) errors.imageAlt = imageAltError;
 		if (linkRaw && !isSafeUrl(linkRaw)) {
 			errors.link = 'Link must be http(s), mailto, or a relative path.';
+		}
+		if (imageFile && !ALLOWED_IMAGE_MIME.has(imageFile.type)) {
+			errors.image = 'Image must be JPEG, PNG, WEBP, GIF, or AVIF.';
+		}
+		if (imageFile && imageFile.size > MAX_IMAGE_BYTES) {
+			errors.image = 'Image must be 8MB or smaller.';
 		}
 
 		if (Object.keys(errors).length > 0) {
 			return fail(400, { action: 'createWork', message: 'Check the highlighted fields.', fieldErrors: errors });
 		}
+
+		const imagePath = imageFile ? await saveWorkImage(imageFile) : null;
 
 		createWorkItem(
 			title,
@@ -123,6 +182,8 @@ export const actions: Actions = {
 			role,
 			tech,
 			linkRaw,
+			imagePath,
+			imageAlt,
 			parseCheckbox(data, 'featured'),
 			parseNumber(data.get('sort'))
 		);
@@ -144,9 +205,14 @@ export const actions: Actions = {
 		const role = parseText(data.get('role'));
 		const tech = parseText(data.get('tech'));
 		const linkRaw = parseText(data.get('link'));
+		const imageAlt = parseText(data.get('imageAlt'));
+		const imageFile = parseImageFile(data.get('image'));
+		const removeImage = data.getAll('removeImage').some((value) => value === '1');
 		const errors: Record<string, string> = {};
+		const current = getWorkItems().find((item) => item.id === id);
 
 		if (id <= 0) errors.id = 'Invalid item.';
+		if (!current) errors.id = 'Work item not found.';
 		if (!title) errors.title = 'Title is required.';
 		if (!description) errors.description = 'Description is required.';
 		const titleError = ensureMaxLength(title, MAX_LENGTHS.title, 'Title');
@@ -161,8 +227,16 @@ export const actions: Actions = {
 		if (roleError) errors.role = roleError;
 		const techError = ensureOptionalMaxLength(tech, MAX_LENGTHS.tech, 'Tech');
 		if (techError) errors.tech = techError;
+		const imageAltError = ensureOptionalMaxLength(imageAlt, MAX_LENGTHS.imageAlt, 'Image alt');
+		if (imageAltError) errors.imageAlt = imageAltError;
 		if (linkRaw && !isSafeUrl(linkRaw)) {
 			errors.link = 'Link must be http(s), mailto, or a relative path.';
+		}
+		if (imageFile && !ALLOWED_IMAGE_MIME.has(imageFile.type)) {
+			errors.image = 'Image must be JPEG, PNG, WEBP, GIF, or AVIF.';
+		}
+		if (imageFile && imageFile.size > MAX_IMAGE_BYTES) {
+			errors.image = 'Image must be 8MB or smaller.';
 		}
 
 		if (Object.keys(errors).length > 0) {
@@ -174,6 +248,17 @@ export const actions: Actions = {
 			});
 		}
 
+		let imagePath = current?.imagePath ?? null;
+		if (removeImage) {
+			imagePath = null;
+		}
+		if (imageFile) {
+			imagePath = await saveWorkImage(imageFile);
+		}
+		if ((removeImage || imageFile) && current?.imagePath) {
+			deleteWorkImage(current.imagePath);
+		}
+
 		updateWorkItem(
 			id,
 			title,
@@ -183,6 +268,8 @@ export const actions: Actions = {
 			role,
 			tech,
 			linkRaw,
+			imagePath,
+			imageAlt,
 			parseCheckbox(data, 'featured'),
 			parseNumber(data.get('sort'))
 		);
@@ -199,7 +286,11 @@ export const actions: Actions = {
 		if (id <= 0) {
 			return fail(400, { action: 'deleteWork', message: 'Invalid item.' });
 		}
+		const current = getWorkItems().find((item) => item.id === id);
 		deleteWorkItem(id);
+		if (current?.imagePath) {
+			deleteWorkImage(current.imagePath);
+		}
 		return { success: true, message: 'Work item deleted.', action: 'deleteWork', itemId: id };
 	}
 };

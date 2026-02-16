@@ -2,6 +2,7 @@
 	import SeoHead from '$lib/components/SeoHead.svelte';
 	import MotionReveal from '$lib/components/MotionReveal.svelte';
 	import AdminNav from '$lib/components/AdminNav.svelte';
+	import AdminModal from '$lib/components/AdminModal.svelte';
 	import { formatTitle } from '$lib/utils/seo';
 	import type { PageData, ActionData } from './$types';
 
@@ -22,6 +23,24 @@
 		feedback?.action === action && (itemId === undefined || feedback?.itemId === itemId)
 			? feedback?.fieldErrors?.[field]
 			: undefined;
+
+	let isCreateModalOpen = feedback?.action === 'createPost' && feedback?.success !== true;
+	let editingPostId: number | null =
+		feedback?.action === 'updatePost' && feedback?.success !== true ? (feedback.itemId ?? null) : null;
+	let deletingPostId: number | null =
+		feedback?.action === 'deletePost' && feedback?.success !== true ? (feedback.itemId ?? null) : null;
+
+	const closeCreateModal = () => {
+		isCreateModalOpen = false;
+	};
+
+	const closeEditModal = () => {
+		editingPostId = null;
+	};
+
+	const closeDeleteModal = () => {
+		deletingPostId = null;
+	};
 </script>
 
 <SeoHead title={formatTitle('Admin | Blog')} description="Manage blog posts and intro copy." />
@@ -79,115 +98,18 @@
 <section class="section-pad">
 	<div class="grid gap-6 lg:grid-cols-[0.4fr_0.6fr]">
 		<MotionReveal className="glass p-8">
-			<h2 class="text-2xl font-semibold text-white">Add blog post</h2>
-			{#if isAction('createPost') && feedback?.message}
-				<p class={`mt-3 text-sm ${feedback?.success ? 'text-aurora-200' : 'text-ink-200'}`}>
-					{feedback?.message}
-				</p>
+			<h2 class="text-2xl font-semibold text-white">Post workflows</h2>
+			<p class="mt-3 text-sm text-ink-200">Create and edit posts inside modals for a cleaner admin workspace.</p>
+			{#if isAction('createPost') && feedback?.success && feedback?.message}
+				<p class="mt-3 text-sm text-aurora-200">{feedback?.message}</p>
 			{/if}
-			<form class="mt-4 space-y-4" method="POST" action="?/createPost">
-				<input type="hidden" name="csrfToken" value={data.csrfToken} />
-				<div>
-					<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postTitle">
-						Title
-					</label>
-					<input
-						id="postTitle"
-						name="title"
-						required
-						maxlength="120"
-						class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
-						aria-invalid={Boolean(fieldError('createPost', 'title'))}
-					/>
-					{#if fieldError('createPost', 'title')}
-						<p class="mt-2 text-xs text-red-200">{fieldError('createPost', 'title')}</p>
-					{/if}
-				</div>
-				<div>
-					<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postSlug">
-						Slug
-					</label>
-					<input
-						id="postSlug"
-						name="slug"
-						maxlength="120"
-						class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
-						aria-invalid={Boolean(fieldError('createPost', 'slug'))}
-					/>
-					{#if fieldError('createPost', 'slug')}
-						<p class="mt-2 text-xs text-red-200">{fieldError('createPost', 'slug')}</p>
-					{/if}
-				</div>
-				<div>
-					<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postExcerpt">
-						Excerpt
-					</label>
-					<textarea
-						id="postExcerpt"
-						name="excerpt"
-						maxlength="300"
-						rows="2"
-						class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
-						aria-invalid={Boolean(fieldError('createPost', 'excerpt'))}
-					></textarea>
-					{#if fieldError('createPost', 'excerpt')}
-						<p class="mt-2 text-xs text-red-200">{fieldError('createPost', 'excerpt')}</p>
-					{/if}
-				</div>
-				<div>
-					<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postContent">
-						Content
-					</label>
-					<textarea
-						id="postContent"
-						name="content"
-						maxlength="20000"
-						rows="4"
-						class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
-						aria-invalid={Boolean(fieldError('createPost', 'content'))}
-					></textarea>
-					{#if fieldError('createPost', 'content')}
-						<p class="mt-2 text-xs text-red-200">{fieldError('createPost', 'content')}</p>
-					{/if}
-				</div>
-				<div>
-					<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postTags">
-						Tags
-					</label>
-					<input
-						id="postTags"
-						name="tags"
-						maxlength="200"
-						class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
-						aria-invalid={Boolean(fieldError('createPost', 'tags'))}
-					/>
-					{#if fieldError('createPost', 'tags')}
-						<p class="mt-2 text-xs text-red-200">{fieldError('createPost', 'tags')}</p>
-					{/if}
-				</div>
-				<div>
-					<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postPublished">
-						Published date
-					</label>
-					<input
-						id="postPublished"
-						name="publishedAt"
-						type="date"
-						class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
-					/>
-				</div>
-				<div class="flex items-center gap-3 text-sm text-ink-200">
-					<input type="hidden" name="draft" value="0" />
-					<input id="postDraft" name="draft" type="checkbox" value="1" class="h-4 w-4" />
-					<label for="postDraft">Draft</label>
-				</div>
-				<div class="flex items-center gap-3 text-sm text-ink-200">
-					<input type="hidden" name="featured" value="0" />
-					<input id="postFeatured" name="featured" type="checkbox" value="1" class="h-4 w-4" />
-					<label for="postFeatured">Featured</label>
-				</div>
-				<button class="nav-pill border-ink-100 bg-ink-900 text-white" type="submit">Add post</button>
-			</form>
+			<button
+				class="nav-pill mt-6 border-ink-100 bg-ink-900 text-white"
+				type="button"
+				on:click={() => (isCreateModalOpen = true)}
+			>
+				Add post
+			</button>
 		</MotionReveal>
 		<div class="space-y-4">
 			<h2 class="text-2xl font-semibold text-white">
@@ -195,117 +117,212 @@
 			</h2>
 			{#if data.posts.length}
 				{#each data.posts as post}
-					<form class="card grid gap-3" method="POST" action="?/updatePost">
-						<input type="hidden" name="csrfToken" value={data.csrfToken} />
-						<input type="hidden" name="id" value={post.id} />
-						{#if isAction('updatePost') && feedback?.itemId === post.id && feedback?.message}
+					<MotionReveal className="card space-y-4">
+						{#if isAction('updatePost') && feedback?.success && feedback?.itemId === post.id && feedback?.message}
+							<p class="text-xs text-aurora-200">{feedback?.message}</p>
+						{/if}
+						{#if isAction('deletePost') && feedback?.itemId === post.id && feedback?.message}
 							<p class={`text-xs ${feedback?.success ? 'text-aurora-200' : 'text-ink-200'}`}>
 								{feedback?.message}
 							</p>
 						{/if}
-						<div class="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-ink-300">
-							<span>Post</span>
-							{#if post.draft === 1}
-								<span class="badge">Draft</span>
-							{:else}
-								<a class="link-underline" href={`/blog/${post.slug}`} target="_blank" rel="noreferrer noopener">Open</a>
-							{/if}
+						<div class="flex flex-wrap items-start justify-between gap-3">
+							<div class="space-y-2">
+								<div class="flex flex-wrap items-center gap-2">
+									<h3 class="text-lg font-semibold text-white">{post.title}</h3>
+									{#if post.draft === 1}
+										<span class="badge">Draft</span>
+									{/if}
+									{#if post.featured === 1}
+										<span class="badge">Featured</span>
+									{/if}
+								</div>
+								{#if post.excerpt}
+									<p class="text-sm text-ink-200">{post.excerpt}</p>
+								{/if}
+								<div class="text-xs uppercase tracking-[0.2em] text-ink-300">
+									{#if post.publishedAt}
+										<span>Published {post.publishedAt}</span>
+									{:else}
+										<span>No publish date</span>
+									{/if}
+								</div>
+							</div>
+							<div class="flex flex-wrap gap-2">
+								{#if post.draft !== 1}
+									<a class="nav-pill" href={`/blog/${post.slug}`} target="_blank" rel="noreferrer noopener">Open</a>
+								{/if}
+								<button
+									class="nav-pill border-ink-100 bg-ink-900 text-white"
+									type="button"
+									on:click={() => (editingPostId = post.id)}
+								>
+									Edit
+								</button>
+								<button class="nav-pill" type="button" on:click={() => (deletingPostId = post.id)}>
+									Delete
+								</button>
+							</div>
 						</div>
-						<input
-							name="title"
-							value={post.title}
-							required
-							maxlength="120"
-							class="w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-2 text-sm text-white"
-							aria-invalid={Boolean(fieldError('updatePost', 'title', post.id))}
-						/>
-						{#if fieldError('updatePost', 'title', post.id)}
-							<p class="text-xs text-red-200">{fieldError('updatePost', 'title', post.id)}</p>
+					</MotionReveal>
+
+					<AdminModal
+						open={editingPostId === post.id}
+						title={`Edit post: ${post.title}`}
+						description="Update post details without leaving the list view."
+						on:close={closeEditModal}
+					>
+						{#if isAction('updatePost') && feedback?.itemId === post.id && feedback?.message}
+							<p class={`mb-4 text-sm ${feedback?.success ? 'text-aurora-200' : 'text-ink-200'}`}>
+								{feedback?.message}
+							</p>
 						{/if}
-						<input
-							name="slug"
-							value={post.slug}
-							maxlength="120"
-							class="w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-2 text-sm text-white"
-							aria-invalid={Boolean(fieldError('updatePost', 'slug', post.id))}
-						/>
-						{#if fieldError('updatePost', 'slug', post.id)}
-							<p class="text-xs text-red-200">{fieldError('updatePost', 'slug', post.id)}</p>
-						{/if}
-						<textarea
-							name="excerpt"
-							maxlength="300"
-							rows="2"
-							class="w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-2 text-sm text-white"
-							aria-invalid={Boolean(fieldError('updatePost', 'excerpt', post.id))}
-						>{post.excerpt ?? ''}</textarea>
-						{#if fieldError('updatePost', 'excerpt', post.id)}
-							<p class="text-xs text-red-200">{fieldError('updatePost', 'excerpt', post.id)}</p>
-						{/if}
-						<textarea
-							name="content"
-							maxlength="20000"
-							rows="4"
-							class="w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-2 text-sm text-white"
-							aria-invalid={Boolean(fieldError('updatePost', 'content', post.id))}
-						>{post.content ?? ''}</textarea>
-						{#if fieldError('updatePost', 'content', post.id)}
-							<p class="text-xs text-red-200">{fieldError('updatePost', 'content', post.id)}</p>
-						{/if}
-						<input
-							name="tags"
-							value={post.tags ?? ''}
-							maxlength="200"
-							class="w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-2 text-sm text-white"
-							aria-invalid={Boolean(fieldError('updatePost', 'tags', post.id))}
-						/>
-						{#if fieldError('updatePost', 'tags', post.id)}
-							<p class="text-xs text-red-200">{fieldError('updatePost', 'tags', post.id)}</p>
-						{/if}
-						<input
-							name="publishedAt"
-							type="date"
-							value={post.publishedAt ?? ''}
-							class="w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-2 text-sm text-white"
-						/>
-						<div class="flex items-center gap-3 text-sm text-ink-200">
-							<input type="hidden" name="draft" value="0" />
-							<input
-								id={`post-draft-${post.id}`}
-								name="draft"
-								type="checkbox"
-								value="1"
-								class="h-4 w-4"
-								checked={post.draft === 1}
-							/>
-							<label for={`post-draft-${post.id}`}>Draft</label>
-						</div>
-						<div class="flex items-center gap-3 text-sm text-ink-200">
-							<input type="hidden" name="featured" value="0" />
-							<input
-								id={`post-featured-${post.id}`}
-								name="featured"
-								type="checkbox"
-								value="1"
-								class="h-4 w-4"
-								checked={post.featured === 1}
-							/>
-							<label for={`post-featured-${post.id}`}>Featured</label>
-						</div>
-						<div class="flex flex-wrap gap-3">
-							<button class="nav-pill border-ink-100 bg-ink-900 text-white" type="submit">Update</button>
-							<button
-								class="nav-pill"
-								type="submit"
-								formaction="?/deletePost"
-								on:click={(event) => {
-									if (!confirm('Delete this post?')) event.preventDefault();
-								}}
-							>
-								Delete
-							</button>
-						</div>
-					</form>
+						<form class="space-y-4" method="POST" action="?/updatePost">
+							<input type="hidden" name="csrfToken" value={data.csrfToken} />
+							<input type="hidden" name="id" value={post.id} />
+							<div>
+								<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for={`post-title-${post.id}`}>
+									Title
+								</label>
+								<input
+									id={`post-title-${post.id}`}
+									name="title"
+									value={post.title}
+									required
+									maxlength="120"
+									class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+									aria-invalid={Boolean(fieldError('updatePost', 'title', post.id))}
+								/>
+								{#if fieldError('updatePost', 'title', post.id)}
+									<p class="mt-2 text-xs text-red-200">{fieldError('updatePost', 'title', post.id)}</p>
+								{/if}
+							</div>
+							<div>
+								<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for={`post-slug-${post.id}`}>
+									Slug
+								</label>
+								<input
+									id={`post-slug-${post.id}`}
+									name="slug"
+									value={post.slug}
+									maxlength="120"
+									class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+									aria-invalid={Boolean(fieldError('updatePost', 'slug', post.id))}
+								/>
+								{#if fieldError('updatePost', 'slug', post.id)}
+									<p class="mt-2 text-xs text-red-200">{fieldError('updatePost', 'slug', post.id)}</p>
+								{/if}
+							</div>
+							<div>
+								<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for={`post-excerpt-${post.id}`}>
+									Excerpt
+								</label>
+								<textarea
+									id={`post-excerpt-${post.id}`}
+									name="excerpt"
+									maxlength="300"
+									rows="2"
+									class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+									aria-invalid={Boolean(fieldError('updatePost', 'excerpt', post.id))}
+								>{post.excerpt ?? ''}</textarea>
+								{#if fieldError('updatePost', 'excerpt', post.id)}
+									<p class="mt-2 text-xs text-red-200">{fieldError('updatePost', 'excerpt', post.id)}</p>
+								{/if}
+							</div>
+							<div>
+								<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for={`post-content-${post.id}`}>
+									Content
+								</label>
+								<textarea
+									id={`post-content-${post.id}`}
+									name="content"
+									maxlength="20000"
+									rows="6"
+									class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+									aria-invalid={Boolean(fieldError('updatePost', 'content', post.id))}
+								>{post.content ?? ''}</textarea>
+								{#if fieldError('updatePost', 'content', post.id)}
+									<p class="mt-2 text-xs text-red-200">{fieldError('updatePost', 'content', post.id)}</p>
+								{/if}
+							</div>
+							<div>
+								<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for={`post-tags-${post.id}`}>
+									Tags
+								</label>
+								<input
+									id={`post-tags-${post.id}`}
+									name="tags"
+									value={post.tags ?? ''}
+									maxlength="200"
+									class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+									aria-invalid={Boolean(fieldError('updatePost', 'tags', post.id))}
+								/>
+								{#if fieldError('updatePost', 'tags', post.id)}
+									<p class="mt-2 text-xs text-red-200">{fieldError('updatePost', 'tags', post.id)}</p>
+								{/if}
+							</div>
+							<div>
+								<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for={`post-published-${post.id}`}>
+									Published date
+								</label>
+								<input
+									id={`post-published-${post.id}`}
+									name="publishedAt"
+									type="date"
+									value={post.publishedAt ?? ''}
+									class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+								/>
+							</div>
+							<div class="flex flex-wrap gap-6">
+								<div class="flex items-center gap-3 text-sm text-ink-200">
+									<input type="hidden" name="draft" value="0" />
+									<input
+										id={`post-draft-${post.id}`}
+										name="draft"
+										type="checkbox"
+										value="1"
+										class="h-4 w-4"
+										checked={post.draft === 1}
+									/>
+									<label for={`post-draft-${post.id}`}>Draft</label>
+								</div>
+								<div class="flex items-center gap-3 text-sm text-ink-200">
+									<input type="hidden" name="featured" value="0" />
+									<input
+										id={`post-featured-${post.id}`}
+										name="featured"
+										type="checkbox"
+										value="1"
+										class="h-4 w-4"
+										checked={post.featured === 1}
+									/>
+									<label for={`post-featured-${post.id}`}>Featured</label>
+								</div>
+							</div>
+							<div class="flex flex-wrap gap-3">
+								<button class="nav-pill border-ink-100 bg-ink-900 text-white" type="submit">Save post</button>
+								<button class="nav-pill" type="button" on:click={closeEditModal}>Cancel</button>
+							</div>
+						</form>
+					</AdminModal>
+
+					<AdminModal
+						open={deletingPostId === post.id}
+						title={`Delete post: ${post.title}?`}
+						description="This permanently removes the blog post."
+						on:close={closeDeleteModal}
+						maxWidthClass="max-w-2xl"
+					>
+						<form class="space-y-4" method="POST" action="?/deletePost">
+							<input type="hidden" name="csrfToken" value={data.csrfToken} />
+							<input type="hidden" name="id" value={post.id} />
+							<p class="text-sm text-ink-200">Slug: {post.slug}</p>
+							<div class="flex flex-wrap gap-3">
+								<button class="nav-pill border-ink-100 bg-ink-900 text-white" type="submit">Delete post</button>
+								<button class="nav-pill" type="button" on:click={closeDeleteModal}>Cancel</button>
+							</div>
+						</form>
+					</AdminModal>
 				{/each}
 			{:else}
 				<div class="card text-sm text-ink-200">No posts yet.</div>
@@ -313,3 +330,124 @@
 		</div>
 	</div>
 </section>
+
+<AdminModal
+	open={isCreateModalOpen}
+	title="Add blog post"
+	description="Create a new post without leaving the blog list."
+	on:close={closeCreateModal}
+>
+	{#if isAction('createPost') && feedback?.message}
+		<p class={`mb-4 text-sm ${feedback?.success ? 'text-aurora-200' : 'text-ink-200'}`}>
+			{feedback?.message}
+		</p>
+	{/if}
+	<form class="space-y-4" method="POST" action="?/createPost">
+		<input type="hidden" name="csrfToken" value={data.csrfToken} />
+		<div>
+			<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postTitle">
+				Title
+			</label>
+			<input
+				id="postTitle"
+				name="title"
+				required
+				maxlength="120"
+				class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+				aria-invalid={Boolean(fieldError('createPost', 'title'))}
+			/>
+			{#if fieldError('createPost', 'title')}
+				<p class="mt-2 text-xs text-red-200">{fieldError('createPost', 'title')}</p>
+			{/if}
+		</div>
+		<div>
+			<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postSlug">
+				Slug
+			</label>
+			<input
+				id="postSlug"
+				name="slug"
+				maxlength="120"
+				class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+				aria-invalid={Boolean(fieldError('createPost', 'slug'))}
+			/>
+			{#if fieldError('createPost', 'slug')}
+				<p class="mt-2 text-xs text-red-200">{fieldError('createPost', 'slug')}</p>
+			{/if}
+		</div>
+		<div>
+			<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postExcerpt">
+				Excerpt
+			</label>
+			<textarea
+				id="postExcerpt"
+				name="excerpt"
+				maxlength="300"
+				rows="2"
+				class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+				aria-invalid={Boolean(fieldError('createPost', 'excerpt'))}
+			></textarea>
+			{#if fieldError('createPost', 'excerpt')}
+				<p class="mt-2 text-xs text-red-200">{fieldError('createPost', 'excerpt')}</p>
+			{/if}
+		</div>
+		<div>
+			<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postContent">
+				Content
+			</label>
+			<textarea
+				id="postContent"
+				name="content"
+				maxlength="20000"
+				rows="6"
+				class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+				aria-invalid={Boolean(fieldError('createPost', 'content'))}
+			></textarea>
+			{#if fieldError('createPost', 'content')}
+				<p class="mt-2 text-xs text-red-200">{fieldError('createPost', 'content')}</p>
+			{/if}
+		</div>
+		<div>
+			<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postTags">
+				Tags
+			</label>
+			<input
+				id="postTags"
+				name="tags"
+				maxlength="200"
+				class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+				aria-invalid={Boolean(fieldError('createPost', 'tags'))}
+			/>
+			{#if fieldError('createPost', 'tags')}
+				<p class="mt-2 text-xs text-red-200">{fieldError('createPost', 'tags')}</p>
+			{/if}
+		</div>
+		<div>
+			<label class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200" for="postPublished">
+				Published date
+			</label>
+			<input
+				id="postPublished"
+				name="publishedAt"
+				type="date"
+				class="mt-2 w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
+			/>
+		</div>
+		<div class="flex flex-wrap gap-6">
+			<div class="flex items-center gap-3 text-sm text-ink-200">
+				<input type="hidden" name="draft" value="0" />
+				<input id="postDraft" name="draft" type="checkbox" value="1" class="h-4 w-4" />
+				<label for="postDraft">Draft</label>
+			</div>
+			<div class="flex items-center gap-3 text-sm text-ink-200">
+				<input type="hidden" name="featured" value="0" />
+				<input id="postFeatured" name="featured" type="checkbox" value="1" class="h-4 w-4" />
+				<label for="postFeatured">Featured</label>
+			</div>
+		</div>
+		<div class="flex flex-wrap gap-3">
+			<button class="nav-pill border-ink-100 bg-ink-900 text-white" type="submit">Add post</button>
+			<button class="nav-pill" type="button" on:click={closeCreateModal}>Cancel</button>
+		</div>
+	</form>
+</AdminModal>

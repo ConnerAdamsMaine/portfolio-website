@@ -14,6 +14,7 @@
 		{ label: 'Footer', href: '/admin/footer' },
 		{ label: 'Assets', href: '/admin/assets' },
 		{ label: 'Tracking', href: '/admin/tracking' },
+		{ label: 'Playground', href: '/admin/playground' },
 		{ label: 'Resume', href: '/admin/resume' }
 	];
 

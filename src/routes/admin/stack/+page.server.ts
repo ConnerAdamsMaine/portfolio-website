@@ -1,6 +1,14 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
-import { getSiteSettings, updateSiteSettings, getStackItems, createStackItem, updateStackItem, deleteStackItem } from '$lib/server/db';
+import {
+	getSiteSettings,
+	updateSiteSettings,
+	getStackItems,
+	createStackItem,
+	updateStackItem,
+	deleteStackItem,
+	reorderStackItems
+} from '$lib/server/db';
 import { requireAdmin } from '$lib/server/auth';
 import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
 
@@ -46,11 +54,12 @@ export const actions: Actions = {
 
 		const label = String(data.get('label') ?? '').trim();
 		const detail = String(data.get('detail') ?? '').trim();
+		const category = String(data.get('category') ?? '').trim();
 		if (!label) {
 			return fail(400, { action: 'createStack', message: 'Label is required.', fieldErrors: { label: 'Label is required.' } });
 		}
 
-		createStackItem(label, detail || null, parseNumber(data.get('sort')));
+		createStackItem(label, detail || null, category || null, parseNumber(data.get('sort')));
 		return { success: true, message: 'Stack item added.', action: 'createStack' };
 	},
 	updateStack: async (event) => {
@@ -63,12 +72,37 @@ export const actions: Actions = {
 		const id = parseNumber(data.get('id'), -1);
 		const label = String(data.get('label') ?? '').trim();
 		const detail = String(data.get('detail') ?? '').trim();
+		const category = String(data.get('category') ?? '').trim();
 		if (id <= 0 || !label) {
 			return fail(400, { action: 'updateStack', message: 'Label is required.', itemId: id, fieldErrors: { label: 'Label is required.' } });
 		}
 
-		updateStackItem(id, label, detail || null, parseNumber(data.get('sort')));
+		updateStackItem(id, label, detail || null, category || null, parseNumber(data.get('sort')));
 		return { success: true, message: 'Stack item updated.', action: 'updateStack', itemId: id };
+	},
+	reorderStack: async (event) => {
+		requireAdmin(event);
+		const data = await event.request.formData();
+		if (!validateCsrfToken(event, data)) {
+			return fail(403, { action: 'reorderStack', message: 'Invalid CSRF token.' });
+		}
+
+		const rawOrder = String(data.get('order') ?? '').trim();
+		if (!rawOrder) {
+			return fail(400, { action: 'reorderStack', message: 'Invalid stack order.' });
+		}
+
+		const orderedIds = rawOrder
+			.split(',')
+			.map((value) => Number(value.trim()))
+			.filter((value) => Number.isInteger(value) && value > 0);
+
+		if (!orderedIds.length) {
+			return fail(400, { action: 'reorderStack', message: 'Invalid stack order.' });
+		}
+
+		reorderStackItems(orderedIds);
+		return { success: true, message: 'Stack order updated.', action: 'reorderStack' };
 	},
 	deleteStack: async (event) => {
 		requireAdmin(event);

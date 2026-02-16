@@ -18,6 +18,15 @@ SvelteKit + Tailwind portfolio site with an admin UI backed by SQLite.
 - `ADMIN_SESSION_VERSION`: Bump to revoke existing admin sessions
 - `ADMIN_EMAIL`: Admin login email
 - `ADMIN_PASSWORD`: Admin login password
+- `PLAYGROUND_ENABLED`: Enable/disable the playground runtime
+- `PLAYGROUND_RUNTIME_MODE`: `docker` (default) or `mock`
+- `PLAYGROUND_DOCKER_BINARY`: Docker CLI binary path (default `docker`)
+- `PLAYGROUND_WS_HOST`: Bind host for playground websocket server
+- `PLAYGROUND_WS_PORT`: Bind port for playground websocket server
+- `PLAYGROUND_WS_PATH`: Websocket path (default `/playground/ws`)
+- `PLAYGROUND_WS_PUBLIC_URL`: Optional externally reachable ws/wss endpoint override
+- `PLAYGROUND_COMMAND_TIMEOUT_MS`: Timeout for docker runtime commands
+- `PLAYGROUND_MAX_OUTPUT_BYTES`: Cap command output bytes stored/sent per execution
 
 ## Development
 `npm run dev`
@@ -32,6 +41,12 @@ You can also use `npm run preview` to test the production build locally.
 - Login: `/admin/login`
 - Credentials are read from `ADMIN_EMAIL` / `ADMIN_PASSWORD`
 - CSRF protection and rate limiting are enabled for admin actions
+- Playground operations: `/admin/playground`
+
+## Playground
+- User page: `/playground`
+- Session API: `POST /api/playground/session`, `DELETE /api/playground/session`
+- Websocket runtime events: configurable endpoint (defaults to `ws://<host>:24680/playground/ws`)
 
 ## Tooling
 - `npm run check` — type and Svelte checks

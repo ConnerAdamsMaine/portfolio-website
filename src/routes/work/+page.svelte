@@ -81,7 +81,16 @@
 						<div
 							class="aspect-[4/3] rounded-2xl border border-ink-200/20 bg-white/5 shadow-soft flex items-center justify-center text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-ink-200"
 						>
-							Preview
+							{#if project.imagePath}
+								<img
+									src={project.imagePath}
+									alt={project.imageAlt ?? `${project.title} preview`}
+									class="h-full w-full rounded-2xl object-cover"
+									loading="lazy"
+								/>
+							{:else}
+								Preview
+							{/if}
 						</div>
 					</MotionReveal>
 				{/each}
@@ -97,7 +106,16 @@
 						<div
 							class="aspect-[4/3] rounded-2xl border border-ink-200/20 bg-white/5 shadow-soft flex items-center justify-center text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-ink-200"
 						>
-							Preview
+							{#if project.imagePath}
+								<img
+									src={project.imagePath}
+									alt={project.imageAlt ?? `${project.title} preview`}
+									class="h-full w-full rounded-2xl object-cover"
+									loading="lazy"
+								/>
+							{:else}
+								Preview
+							{/if}
 						</div>
 						<div class="flex flex-wrap gap-2">
 							{#if project.featured}
