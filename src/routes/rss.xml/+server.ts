@@ -9,6 +9,8 @@ const escapeXml = (value: string) =>
 		.replace(/"/g, '&quot;')
 		.replace(/'/g, '&apos;');
 
+const escapeCdata = (value: string) => value.replaceAll(']]>', ']]]]><![CDATA[>');
+
 export const GET: RequestHandler = ({ url }) => {
 	const origin = url.origin;
 	const siteSettings = getSiteSettings();
@@ -18,7 +20,7 @@ export const GET: RequestHandler = ({ url }) => {
 		.map((post) => {
 			const link = `${origin}/blog/${post.slug}`;
 			const pubDate = new Date(post.publishedAt ?? post.createdAt).toUTCString();
-			const description = post.excerpt ?? post.content ?? '';
+			const description = escapeCdata(post.excerpt ?? post.content ?? '');
 			return `
 				<item>
 					<title>${escapeXml(post.title)}</title>

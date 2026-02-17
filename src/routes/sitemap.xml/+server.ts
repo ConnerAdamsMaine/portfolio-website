@@ -15,6 +15,7 @@ export const GET: RequestHandler = ({ url }) => {
 		'/',
 		'/about',
 		'/work',
+		'/resume',
 		'/blog',
 		'/contact',
 		'/privacy-policy',

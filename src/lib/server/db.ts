@@ -114,6 +114,8 @@ type TrackingEvent = {
 	createdAt: string;
 };
 
+type InboundMessageChannel = 'contact' | 'collaborate';
+
 type FooterLink = {
 	id: number;
 	section: string;
@@ -357,6 +359,28 @@ const createTables = (database: Database.Database) => {
 			created_at TEXT NOT NULL
 		);
 
+		CREATE TABLE IF NOT EXISTS inbound_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			channel TEXT NOT NULL,
+			name TEXT NOT NULL,
+			email TEXT NOT NULL,
+			scope TEXT NOT NULL,
+			ip TEXT,
+			user_agent TEXT,
+			created_at TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS newsletter_subscriptions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT NOT NULL UNIQUE,
+			name TEXT,
+			interest TEXT,
+			ip TEXT,
+			user_agent TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+
 		CREATE TABLE IF NOT EXISTS footer_links (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			section TEXT NOT NULL,
@@ -436,6 +460,10 @@ const createTables = (database: Database.Database) => {
 			ON playground_socket_connections(session_id, connected_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_playground_logs_session
 			ON playground_logs(session_id, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_inbound_messages_channel_created
+			ON inbound_messages(channel, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_newsletter_subscriptions_updated
+			ON newsletter_subscriptions(updated_at DESC);
 	`);
 };
 
@@ -552,6 +580,37 @@ const ensureTrackingTable = (database: Database.Database) => {
 			payload TEXT,
 			created_at TEXT NOT NULL
 		);
+	`);
+};
+
+const ensureLeadCaptureTables = (database: Database.Database) => {
+	database.exec(`
+		CREATE TABLE IF NOT EXISTS inbound_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			channel TEXT NOT NULL,
+			name TEXT NOT NULL,
+			email TEXT NOT NULL,
+			scope TEXT NOT NULL,
+			ip TEXT,
+			user_agent TEXT,
+			created_at TEXT NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS newsletter_subscriptions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT NOT NULL UNIQUE,
+			name TEXT,
+			interest TEXT,
+			ip TEXT,
+			user_agent TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_inbound_messages_channel_created
+			ON inbound_messages(channel, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_newsletter_subscriptions_updated
+			ON newsletter_subscriptions(updated_at DESC);
 	`);
 };
 
@@ -1042,7 +1101,8 @@ const runMigrations = (database: Database.Database) => {
 		{ id: 16, name: 'playground_tables', up: ensurePlaygroundTables },
 		{ id: 17, name: 'playground_seed_playsets', up: seedPlaysets },
 		{ id: 18, name: 'playset_columns_compat', up: ensurePlaysetColumnsCompatibility },
-		{ id: 19, name: 'work_items_media_columns', up: ensureWorkItemsColumns }
+		{ id: 19, name: 'work_items_media_columns', up: ensureWorkItemsColumns },
+		{ id: 20, name: 'lead_capture_tables', up: ensureLeadCaptureTables }
 	];
 
 	for (const migration of migrations) {
@@ -1501,7 +1561,7 @@ const slugify = (value: string) =>
 const ensureUniqueSlug = (database: Database.Database, slug: string, currentId?: number) => {
 	let candidate = slug || 'post';
 	let suffix = 1;
-	while (true) {
+	for (;;) {
 		const existing = database
 			.prepare('SELECT id FROM posts WHERE slug = ?')
 			.get(candidate) as { id: number } | undefined;
@@ -1629,6 +1689,70 @@ export const deleteAsset = (id: number) => {
 	database.prepare('DELETE FROM assets WHERE id = ?').run(id);
 
 	clearCache('assets');
+};
+
+const clampString = (value: string, max: number) =>
+	value.length > max ? value.slice(0, max) : value;
+
+export const createInboundMessage = (
+	channel: InboundMessageChannel,
+	name: string,
+	email: string,
+	scope: string,
+	ip: string | null,
+	userAgent: string | null
+) => {
+	const database = getDb();
+	const now = new Date().toISOString();
+	const safeChannel: InboundMessageChannel = channel === 'collaborate' ? 'collaborate' : 'contact';
+	database
+		.prepare(
+			`INSERT INTO inbound_messages (channel, name, email, scope, ip, user_agent, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`
+		)
+		.run(
+			safeChannel,
+			clampString(name.trim(), 160),
+			clampString(email.trim().toLowerCase(), 320),
+			clampString(scope.trim(), 10_000),
+			ip ? clampString(ip, 80) : null,
+			userAgent ? clampString(userAgent, 512) : null,
+			now
+		);
+};
+
+export const upsertNewsletterSubscription = (
+	name: string | null,
+	email: string,
+	interest: string | null,
+	ip: string | null,
+	userAgent: string | null
+) => {
+	const database = getDb();
+	const now = new Date().toISOString();
+	const normalizedEmail = clampString(email.trim().toLowerCase(), 320);
+	const normalizedName = name ? clampString(name.trim(), 160) : null;
+	const normalizedInterest = interest ? clampString(interest.trim(), 160) : null;
+	database
+		.prepare(
+			`INSERT INTO newsletter_subscriptions (email, name, interest, ip, user_agent, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(email) DO UPDATE SET
+			 	name = excluded.name,
+			 	interest = excluded.interest,
+			 	ip = excluded.ip,
+			 	user_agent = excluded.user_agent,
+			 	updated_at = excluded.updated_at`
+		)
+		.run(
+			normalizedEmail,
+			normalizedName,
+			normalizedInterest,
+			ip ? clampString(ip, 80) : null,
+			userAgent ? clampString(userAgent, 512) : null,
+			now,
+			now
+		);
 };
 
 export const createTrackingEvent = (
@@ -1841,7 +1965,7 @@ const ensureUniquePlaysetSlug = (database: Database.Database, slug: string, curr
 	const base = slug || 'playset';
 	let candidate = base;
 	let suffix = 1;
-	while (true) {
+	for (;;) {
 		const existing = database
 			.prepare('SELECT id FROM playsets WHERE slug = ?')
 			.get(candidate) as { id: number } | undefined;

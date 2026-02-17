@@ -2,6 +2,7 @@ import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
 import { getPlaysetById, getPlaysetBySlug } from '$lib/server/db';
 import { rateLimit } from '$lib/server/rateLimit';
+import { isAdminAuthenticated } from '$lib/server/auth';
 import { playgroundConfig } from '$lib/server/playground/config';
 import { createRuntimeSession, terminateSessionWithToken } from '$lib/server/playground/runtime';
 import { ensurePlaygroundWebSocketServer, getPlaygroundWsClientUrl } from '$lib/server/playground/ws';
@@ -26,13 +27,33 @@ const parseJson = async <T>(request: Request): Promise<T | null> => {
 	}
 };
 
+const hasAllowedOrigin = (request: Request, origin: string) => {
+	const requestOrigin = request.headers.get('origin');
+	if (!requestOrigin) return true;
+	return requestOrigin === origin;
+};
+
 export const POST: RequestHandler = async (event) => {
 	if (!playgroundConfig.enabled) {
 		return json({ ok: false, message: 'Playground is disabled.' }, { status: 503 });
 	}
+	if (playgroundConfig.requireAdmin && !isAdminAuthenticated(event)) {
+		return json({ ok: false, message: 'Playground requires admin authentication.' }, { status: 403 });
+	}
+	if (
+		playgroundConfig.enforceSameOrigin &&
+		!hasAllowedOrigin(event.request, event.url.origin)
+	) {
+		return json({ ok: false, message: 'Forbidden origin.' }, { status: 403 });
+	}
 
 	const ip = event.getClientAddress();
-	if (!rateLimit(`playground:create:${ip}`, { windowMs: 60_000, max: 10 })) {
+	if (
+		!rateLimit(`playground:create:${ip}`, {
+			windowMs: 60_000,
+			max: playgroundConfig.createRateLimitPerMinute
+		})
+	) {
 		return json({ ok: false, message: 'Rate limit exceeded. Try again in a minute.' }, { status: 429 });
 	}
 
@@ -89,6 +110,21 @@ export const POST: RequestHandler = async (event) => {
 };
 
 export const DELETE: RequestHandler = async (event) => {
+	if (playgroundConfig.requireAdmin && !isAdminAuthenticated(event)) {
+		return json({ ok: false, message: 'Playground requires admin authentication.' }, { status: 403 });
+	}
+	if (
+		playgroundConfig.enforceSameOrigin &&
+		!hasAllowedOrigin(event.request, event.url.origin)
+	) {
+		return json({ ok: false, message: 'Forbidden origin.' }, { status: 403 });
+	}
+
+	const ip = event.getClientAddress();
+	if (!rateLimit(`playground:delete:${ip}`, { windowMs: 60_000, max: 30 })) {
+		return json({ ok: false, message: 'Rate limit exceeded. Try again in a minute.' }, { status: 429 });
+	}
+
 	const body = (await parseJson<SessionDeleteBody>(event.request)) ?? {};
 	const sessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : '';
 	const joinToken = typeof body.joinToken === 'string' ? body.joinToken.trim() : '';

@@ -41,7 +41,7 @@
 	let isStartingSession = false;
 	let isRunningCommand = false;
 	let hasAcceptedUsage = false;
-	let usageModalOpen = true;
+	let usageModalOpen = !data.playgroundLocked;
 	let errorMessage = '';
 	let consoleLines: ConsoleLine[] = [];
 
@@ -225,7 +225,11 @@
 		<p class="max-w-3xl text-lg text-ink-200">
 			Start isolated runtime sessions, execute commands over websocket, and inspect live logs.
 		</p>
-		{#if !data.playgroundEnabled}
+		{#if data.playgroundLocked}
+			<p class="rounded-2xl border border-amber-300/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+				Playground access is restricted to authenticated admins.
+			</p>
+		{:else if !data.playgroundEnabled}
 			<p class="rounded-2xl border border-red-300/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
 				Playground runtime is currently disabled.
 			</p>

@@ -18,15 +18,24 @@ SvelteKit + Tailwind portfolio site with an admin UI backed by SQLite.
 - `ADMIN_SESSION_VERSION`: Bump to revoke existing admin sessions
 - `ADMIN_EMAIL`: Admin login email
 - `ADMIN_PASSWORD`: Admin login password
+- `LEAD_WEBHOOK_URL`: Optional webhook endpoint for contact/collaborate/subscribe notifications
+- `LEAD_WEBHOOK_TOKEN`: Optional bearer token sent to the lead webhook
+- `LEAD_NOTIFY_TIMEOUT_MS`: Lead webhook timeout in milliseconds (default `2500`)
 - `PLAYGROUND_ENABLED`: Enable/disable the playground runtime
+- `PLAYGROUND_REQUIRE_ADMIN`: Require admin auth for playground session APIs (recommended `true`)
+- `PLAYGROUND_ENFORCE_SAME_ORIGIN`: Reject cross-origin playground API requests
 - `PLAYGROUND_RUNTIME_MODE`: `docker` (default) or `mock`
 - `PLAYGROUND_DOCKER_BINARY`: Docker CLI binary path (default `docker`)
 - `PLAYGROUND_WS_HOST`: Bind host for playground websocket server
 - `PLAYGROUND_WS_PORT`: Bind port for playground websocket server
 - `PLAYGROUND_WS_PATH`: Websocket path (default `/playground/ws`)
 - `PLAYGROUND_WS_PUBLIC_URL`: Optional externally reachable ws/wss endpoint override
+- `PLAYGROUND_CREATE_RATE_LIMIT_PER_MINUTE`: Max session create calls per IP each minute
 - `PLAYGROUND_COMMAND_TIMEOUT_MS`: Timeout for docker runtime commands
 - `PLAYGROUND_MAX_OUTPUT_BYTES`: Cap command output bytes stored/sent per execution
+- `PLAYGROUND_MAX_COMMANDS_PER_SESSION`: Hard cap on commands executed in one session
+- `PLAYGROUND_COMMAND_RATE_WINDOW_MS`: Command burst-control window duration
+- `PLAYGROUND_MAX_COMMANDS_PER_WINDOW`: Command burst-control max inside each window
 
 ## Development
 `npm run dev`
@@ -41,7 +50,13 @@ You can also use `npm run preview` to test the production build locally.
 - Login: `/admin/login`
 - Credentials are read from `ADMIN_EMAIL` / `ADMIN_PASSWORD`
 - CSRF protection and rate limiting are enabled for admin actions
+- Resume management: `/admin/resume`
 - Playground operations: `/admin/playground`
+
+## Lead Capture
+- `POST /contact` and `POST /collaborate` submissions are persisted in SQLite (`inbound_messages` table)
+- `POST /subscribe` upserts subscribers in SQLite (`newsletter_subscriptions` table)
+- Optional webhook notifications are sent when `LEAD_WEBHOOK_URL` is configured
 
 ## Playground
 - User page: `/playground`

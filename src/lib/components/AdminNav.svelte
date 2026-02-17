@@ -21,7 +21,6 @@
 	const isActive = (href: string) => {
 		const pathname = $page.url.pathname;
 		if (href === '/admin') return pathname === '/admin';
-		if (href === '/admin/resume') return pathname === '/admin/resume' || pathname === '/resume';
 		return pathname.startsWith(href);
 	};
 </script>

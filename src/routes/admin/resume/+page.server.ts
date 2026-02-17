@@ -1,6 +1,56 @@
-import type { PageServerLoad } from './$types';
-import { redirect } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
+import { fail } from '@sveltejs/kit';
+import { requireAdmin } from '$lib/server/auth';
+import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
+import fs from 'node:fs';
+import path from 'node:path';
 
-export const load: PageServerLoad = async () => {
-	throw redirect(303, '/resume');
+const RESUME_DIR = path.resolve('static/uploads/resume');
+const RESUME_FILENAME = 'resume.pdf';
+
+const getResumeMeta = () => {
+	const filePath = path.join(RESUME_DIR, RESUME_FILENAME);
+	if (!fs.existsSync(filePath)) {
+		return null;
+	}
+	const stats = fs.statSync(filePath);
+	return {
+		path: `/uploads/resume/${RESUME_FILENAME}`,
+		size: stats.size,
+		updatedAt: stats.mtime.toISOString()
+	};
+};
+
+export const load: PageServerLoad = async (event) => {
+	requireAdmin(event);
+	return {
+		csrfToken: getCsrfToken(event),
+		resume: getResumeMeta()
+	};
+};
+
+export const actions: Actions = {
+	upload: async (event) => {
+		requireAdmin(event);
+		const data = await event.request.formData();
+		if (!validateCsrfToken(event, data)) {
+			return fail(403, { message: 'Invalid CSRF token.' });
+		}
+
+		const file = data.get('resume');
+		if (!(file instanceof File)) {
+			return fail(400, { message: 'Please attach a PDF.' });
+		}
+
+		const extension = path.extname(file.name).toLowerCase();
+		if (extension !== '.pdf' && file.type !== 'application/pdf') {
+			return fail(400, { message: 'Resume must be a PDF.' });
+		}
+
+		fs.mkdirSync(RESUME_DIR, { recursive: true });
+		const buffer = Buffer.from(await file.arrayBuffer());
+		fs.writeFileSync(path.join(RESUME_DIR, RESUME_FILENAME), buffer);
+
+		return { success: true, message: 'Resume uploaded.' };
+	}
 };

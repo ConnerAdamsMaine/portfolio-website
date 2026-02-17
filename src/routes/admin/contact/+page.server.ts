@@ -41,10 +41,11 @@ export const actions: Actions = {
 			return fail(400, { message: 'GitHub URL must be http(s), mailto, or a relative path.' });
 		}
 
-		const current = getSiteSettings();
-		const { id: _id, ...rest } = current;
+			const current = getSiteSettings();
+			const { id: _id, ...rest } = current;
+			void _id;
 
-		updateSiteSettings({
+			updateSiteSettings({
 			...rest,
 			contactTitle: String(data.get('contactTitle') ?? '').trim(),
 			contactBody: String(data.get('contactBody') ?? '').trim(),

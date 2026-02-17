@@ -20,10 +20,11 @@ export const actions: Actions = {
 			return fail(403, { message: 'Invalid CSRF token.' });
 		}
 
-		const current = getSiteSettings();
-		const { id: _id, ...rest } = current;
+			const current = getSiteSettings();
+			const { id: _id, ...rest } = current;
+			void _id;
 
-		updateSiteSettings({
+			updateSiteSettings({
 			...rest,
 			heroHeadline: String(data.get('heroHeadline') ?? '').trim(),
 			heroSubheadline: String(data.get('heroSubheadline') ?? '').trim(),

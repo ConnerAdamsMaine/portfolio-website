@@ -8,6 +8,27 @@
 	export let data: PageData;
 
 	let heroRef: HTMLElement;
+	const defaultOgImage = '/og-default.jpg';
+
+	const parseHighlights = (value: string | null) =>
+		value
+			? value
+					.split('\n')
+					.map((line) => line.trim())
+					.filter(Boolean)
+			: [];
+
+	const summarizeCaseStudy = (value: string | null) => {
+		if (!value) return null;
+		const cleaned = value
+			.replace(/\r/g, '\n')
+			.split('\n')
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.join(' ');
+		if (!cleaned) return null;
+		return cleaned.length > 160 ? `${cleaned.slice(0, 157)}...` : cleaned;
+	};
 
 	onMount(() => {
 		const media = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -56,6 +77,8 @@
 <SeoHead
 	title={formatTitle('Home')}
 	description={data.siteSettings.heroSubheadline || data.siteSettings.heroHeadline}
+	image={data.featuredWork[0]?.imagePath ?? defaultOgImage}
+	imageAlt={data.featuredWork[0]?.imageAlt ?? 'Featured project preview'}
 />
 
 <section class="section-pad" bind:this={heroRef}>
@@ -130,12 +153,23 @@
 		</div>
 		<div class="mt-8 grid gap-6 lg:grid-cols-3">
 			{#each data.featuredWork as project, index}
+				{@const highlights = parseHighlights(project.highlights)}
+				{@const caseSummary = summarizeCaseStudy(project.longDescription)}
 				<MotionReveal delay={0.08 * index} className="card flex h-full flex-col justify-between">
 					<div class="space-y-3">
 						<div
 							class="aspect-[4/3] rounded-2xl border border-ink-200/20 bg-white/5 shadow-soft flex items-center justify-center text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-ink-200"
 						>
-							Preview
+							{#if project.imagePath}
+								<img
+									src={project.imagePath}
+									alt={project.imageAlt ?? `${project.title} preview`}
+									class="h-full w-full rounded-2xl object-cover"
+									loading="lazy"
+								/>
+							{:else}
+								Preview
+							{/if}
 						</div>
 						<div class="flex flex-wrap gap-2">
 							{#if project.role}
@@ -147,6 +181,18 @@
 						</div>
 						<h3 class="text-2xl font-semibold text-white">{project.title}</h3>
 						<p class="text-sm text-ink-200">{project.description}</p>
+						{#if highlights.length}
+							<ul class="space-y-2 text-sm text-ink-100">
+								{#each highlights.slice(0, 2) as highlight}
+									<li class="flex items-start gap-2">
+										<span class="mt-2 h-1.5 w-1.5 rounded-full bg-aurora-200"></span>
+										<span>{highlight}</span>
+									</li>
+								{/each}
+							</ul>
+						{:else if caseSummary}
+							<p class="text-sm text-ink-100">{caseSummary}</p>
+						{/if}
 					</div>
 					{#if project.link}
 						<a

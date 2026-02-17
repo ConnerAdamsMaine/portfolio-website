@@ -18,7 +18,6 @@
 	};
 
 	const feedback = form as FormFeedback | undefined;
-	const isAction = (action: string) => feedback?.action === action;
 	const fieldError = (action: string, field: string, itemId?: number) =>
 		feedback?.action === action && (itemId === undefined || feedback?.itemId === itemId)
 			? feedback?.fieldErrors?.[field]

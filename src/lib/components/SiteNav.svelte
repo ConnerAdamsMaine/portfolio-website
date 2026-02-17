@@ -6,6 +6,7 @@
 		{ label: 'Home', href: '/' },
 		{ label: 'About', href: '/about' },
 		{ label: 'Work', href: '/work' },
+		{ label: 'Resume', href: '/resume' },
 		{ label: 'Blog', href: '/blog' },
 		{ label: 'Playground', href: '/playground' },
 		{ label: 'Contact', href: '/contact' }

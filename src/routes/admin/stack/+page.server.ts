@@ -35,9 +35,10 @@ export const actions: Actions = {
 			return fail(403, { action: 'updateStackSection', message: 'Invalid CSRF token.' });
 		}
 
-		const current = getSiteSettings();
-		const { id: _id, ...rest } = current;
-		updateSiteSettings({
+			const current = getSiteSettings();
+			const { id: _id, ...rest } = current;
+			void _id;
+			updateSiteSettings({
 			...rest,
 			stackTitle: String(data.get('stackTitle') ?? '').trim(),
 			stackIntro: String(data.get('stackIntro') ?? '').trim()

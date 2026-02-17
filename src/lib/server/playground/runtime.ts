@@ -29,6 +29,9 @@ type RuntimeSession = {
 	reason: string | null;
 	createdAt: number;
 	lastActivityAt: number;
+	commandCount: number;
+	commandWindowStartedAt: number;
+	commandWindowCount: number;
 	sockets: Map<string, WebSocket>;
 };
 
@@ -59,6 +62,13 @@ const safeJson = (value: unknown) => {
 };
 
 const nowIso = () => new Date().toISOString();
+
+const safeTokenEqual = (a: string, b: string) => {
+	const aBuf = Buffer.from(a);
+	const bBuf = Buffer.from(b);
+	if (aBuf.length !== bBuf.length) return false;
+	return crypto.timingSafeEqual(aBuf, bBuf);
+};
 
 const clampOutput = (value: string) => {
 	if (Buffer.byteLength(value) <= playgroundConfig.maxOutputBytes) return value;
@@ -246,7 +256,7 @@ const bootSession = async (session: RuntimeSession) => {
 const validateSessionToken = (sessionId: string, joinToken: string) => {
 	const session = sessions.get(sessionId);
 	if (!session) return false;
-	return session.joinToken === joinToken;
+	return safeTokenEqual(session.joinToken, joinToken);
 };
 
 export const createRuntimeSession = async (
@@ -284,6 +294,9 @@ export const createRuntimeSession = async (
 		reason: null,
 		createdAt: Date.now(),
 		lastActivityAt: Date.now(),
+		commandCount: 0,
+		commandWindowStartedAt: Date.now(),
+		commandWindowCount: 0,
 		sockets: new Map()
 	};
 	sessions.set(sessionId, runtimeSession);
@@ -359,7 +372,7 @@ export const terminateSessionWithToken = async (
 	if (!validateSessionToken(sessionId, joinToken)) {
 		const dbSession = getPlaygroundSessionBySessionId(sessionId);
 		if (!dbSession) return false;
-		if (dbSession.joinToken !== joinToken) return false;
+		if (!safeTokenEqual(dbSession.joinToken, joinToken)) return false;
 		if (!['starting', 'active'].includes(dbSession.status)) return false;
 		updatePlaygroundSessionStatus(sessionId, 'stopped', { reason, ended: true });
 		createPlaygroundLog(sessionId, null, 'warn', 'session-stopped', `Session stopped (${reason}).`);
@@ -458,6 +471,40 @@ const handleClientMessage = async (session: RuntimeSession, wsId: string, raw: R
 		return;
 	}
 
+	const now = Date.now();
+	if (session.commandCount >= playgroundConfig.maxCommandsPerSession) {
+		const socket = session.sockets.get(wsId);
+		if (socket) {
+			sendWsMessage(socket, {
+				type: 'error',
+				message: `Session command limit reached (${playgroundConfig.maxCommandsPerSession}). Start a new session.`
+			});
+		}
+		return;
+	}
+
+	if (now - session.commandWindowStartedAt > playgroundConfig.commandRateWindowMs) {
+		session.commandWindowStartedAt = now;
+		session.commandWindowCount = 0;
+	}
+	if (session.commandWindowCount >= playgroundConfig.maxCommandsPerWindow) {
+		const socket = session.sockets.get(wsId);
+		const retryInMs = Math.max(
+			0,
+			playgroundConfig.commandRateWindowMs - (now - session.commandWindowStartedAt)
+		);
+		if (socket) {
+			sendWsMessage(socket, {
+				type: 'error',
+				message: `Command rate limit reached. Retry in ${Math.ceil(retryInMs / 1000)}s.`
+			});
+		}
+		return;
+	}
+
+	session.commandCount += 1;
+	session.commandWindowCount += 1;
+
 	emitSessionLog(session, wsId, 'info', 'command-start', `Running command: ${command}`);
 	const result = await runCommandInSession(session, command);
 	const response: PlaygroundWsServerMessage = {
@@ -488,7 +535,7 @@ export const attachWebSocketToSession = (
 	request?: IncomingMessage
 ) => {
 	const session = sessions.get(sessionId);
-	if (!session || session.joinToken !== joinToken) {
+	if (!session || !safeTokenEqual(session.joinToken, joinToken)) {
 		socket.close(1008, 'Invalid session credentials.');
 		return null;
 	}

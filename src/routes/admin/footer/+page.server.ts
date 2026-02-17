@@ -68,9 +68,10 @@ export const actions: Actions = {
 			});
 		}
 
-		const current = getSiteSettings();
-		const { id: _id, ...rest } = current;
-		updateSiteSettings({
+			const current = getSiteSettings();
+			const { id: _id, ...rest } = current;
+			void _id;
+			updateSiteSettings({
 			...rest,
 			footerBadge: String(data.get('footerBadge') ?? '').trim(),
 			footerHeadline: String(data.get('footerHeadline') ?? '').trim(),

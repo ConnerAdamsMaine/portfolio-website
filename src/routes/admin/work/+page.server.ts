@@ -115,9 +115,10 @@ export const actions: Actions = {
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updateWorkSection', message: 'Invalid CSRF token.' });
 		}
-		const current = getSiteSettings();
-		const { id: _id, ...rest } = current;
-		updateSiteSettings({
+			const current = getSiteSettings();
+			const { id: _id, ...rest } = current;
+			void _id;
+			updateSiteSettings({
 			...rest,
 			workTitle: String(data.get('workTitle') ?? '').trim(),
 			workIntro: String(data.get('workIntro') ?? '').trim()
