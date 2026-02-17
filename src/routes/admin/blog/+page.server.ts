@@ -7,8 +7,8 @@ import {
 	createPost,
 	updatePost,
 	deletePost
-} from '$lib/server/db';
-import { requireAdmin } from '$lib/server/auth';
+} from '$lib/server/dataStore';
+import { requireAdminCached } from '$lib/server/auth';
 import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
 
 const MAX_LENGTHS = {
@@ -41,25 +41,25 @@ const ensureOptionalMaxLength = (value: string | null, max: number, label: strin
 	value ? ensureMaxLength(value, max, label) : null;
 
 export const load: PageServerLoad = async (event) => {
-	requireAdmin(event);
+	await requireAdminCached(event);
 	return {
-		siteSettings: getSiteSettings(),
-		posts: getPosts(),
+		siteSettings: await getSiteSettings(),
+		posts: await getPosts(),
 		csrfToken: getCsrfToken(event)
 	};
 };
 
 export const actions: Actions = {
 	updateBlogSection: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updateBlogSection', message: 'Invalid CSRF token.' });
 		}
-			const current = getSiteSettings();
+			const current = await getSiteSettings();
 			const { id: _id, ...rest } = current;
 			void _id;
-			updateSiteSettings({
+			await updateSiteSettings({
 			...rest,
 			blogTitle: String(data.get('blogTitle') ?? '').trim(),
 			blogIntro: String(data.get('blogIntro') ?? '').trim()
@@ -67,7 +67,7 @@ export const actions: Actions = {
 		return { success: true, message: 'Blog section saved.', action: 'updateBlogSection' };
 	},
 	createPost: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'createPost', message: 'Invalid CSRF token.' });
@@ -97,7 +97,7 @@ export const actions: Actions = {
 			return fail(400, { action: 'createPost', message: 'Check the highlighted fields.', fieldErrors: errors });
 		}
 
-		createPost(
+		await createPost(
 			title,
 			excerpt,
 			content,
@@ -111,7 +111,7 @@ export const actions: Actions = {
 		return { success: true, message: 'Post added.', action: 'createPost' };
 	},
 	updatePost: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updatePost', message: 'Invalid CSRF token.' });
@@ -143,7 +143,7 @@ export const actions: Actions = {
 			return fail(400, { action: 'updatePost', message: 'Check the highlighted fields.', fieldErrors: errors, itemId: id });
 		}
 
-		updatePost(
+		await updatePost(
 			id,
 			title,
 			excerpt,
@@ -158,7 +158,7 @@ export const actions: Actions = {
 		return { success: true, message: 'Post updated.', action: 'updatePost', itemId: id };
 	},
 	deletePost: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'deletePost', message: 'Invalid CSRF token.' });
@@ -167,7 +167,7 @@ export const actions: Actions = {
 		if (id <= 0) {
 			return fail(400, { action: 'deletePost', message: 'Invalid post.' });
 		}
-		deletePost(id);
+		await deletePost(id);
 		return { success: true, message: 'Post deleted.', action: 'deletePost', itemId: id };
 	}
 };

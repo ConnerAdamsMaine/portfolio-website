@@ -1,8 +1,8 @@
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
-import { getPlaysetById, getPlaysetBySlug } from '$lib/server/db';
+import { getPlaysetById, getPlaysetBySlug } from '$lib/server/dataStore';
 import { rateLimit } from '$lib/server/rateLimit';
-import { isAdminAuthenticated } from '$lib/server/auth';
+import { isAdminAuthenticatedCached } from '$lib/server/auth';
 import { playgroundConfig } from '$lib/server/playground/config';
 import { createRuntimeSession, terminateSessionWithToken } from '$lib/server/playground/runtime';
 import { ensurePlaygroundWebSocketServer, getPlaygroundWsClientUrl } from '$lib/server/playground/ws';
@@ -37,7 +37,7 @@ export const POST: RequestHandler = async (event) => {
 	if (!playgroundConfig.enabled) {
 		return json({ ok: false, message: 'Playground is disabled.' }, { status: 503 });
 	}
-	if (playgroundConfig.requireAdmin && !isAdminAuthenticated(event)) {
+	if (playgroundConfig.requireAdmin && !(await isAdminAuthenticatedCached(event))) {
 		return json({ ok: false, message: 'Playground requires admin authentication.' }, { status: 403 });
 	}
 	if (
@@ -49,10 +49,10 @@ export const POST: RequestHandler = async (event) => {
 
 	const ip = event.getClientAddress();
 	if (
-		!rateLimit(`playground:create:${ip}`, {
+		!(await rateLimit(`playground:create:${ip}`, {
 			windowMs: 60_000,
 			max: playgroundConfig.createRateLimitPerMinute
-		})
+		}))
 	) {
 		return json({ ok: false, message: 'Rate limit exceeded. Try again in a minute.' }, { status: 429 });
 	}
@@ -63,7 +63,7 @@ export const POST: RequestHandler = async (event) => {
 	const playsetId = Number(body.playsetId ?? 0);
 	const playsetSlug = typeof body.playsetSlug === 'string' ? body.playsetSlug.trim() : '';
 
-	const playset = playsetId > 0 ? getPlaysetById(playsetId) : playsetSlug ? getPlaysetBySlug(playsetSlug) : undefined;
+	const playset = playsetId > 0 ? await getPlaysetById(playsetId) : playsetSlug ? await getPlaysetBySlug(playsetSlug) : undefined;
 	if (!playset) {
 		return json({ ok: false, message: 'Playset not found.' }, { status: 404 });
 	}
@@ -110,7 +110,7 @@ export const POST: RequestHandler = async (event) => {
 };
 
 export const DELETE: RequestHandler = async (event) => {
-	if (playgroundConfig.requireAdmin && !isAdminAuthenticated(event)) {
+	if (playgroundConfig.requireAdmin && !(await isAdminAuthenticatedCached(event))) {
 		return json({ ok: false, message: 'Playground requires admin authentication.' }, { status: 403 });
 	}
 	if (
@@ -121,7 +121,7 @@ export const DELETE: RequestHandler = async (event) => {
 	}
 
 	const ip = event.getClientAddress();
-	if (!rateLimit(`playground:delete:${ip}`, { windowMs: 60_000, max: 30 })) {
+	if (!(await rateLimit(`playground:delete:${ip}`, { windowMs: 60_000, max: 30 }))) {
 		return json({ ok: false, message: 'Rate limit exceeded. Try again in a minute.' }, { status: 429 });
 	}
 

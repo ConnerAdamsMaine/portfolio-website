@@ -8,8 +8,8 @@ import {
 	updateStackItem,
 	deleteStackItem,
 	reorderStackItems
-} from '$lib/server/db';
-import { requireAdmin } from '$lib/server/auth';
+} from '$lib/server/dataStore';
+import { requireAdminCached } from '$lib/server/auth';
 import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
 
 const parseNumber = (value: FormDataEntryValue | null, fallback = 0) => {
@@ -19,26 +19,26 @@ const parseNumber = (value: FormDataEntryValue | null, fallback = 0) => {
 };
 
 export const load: PageServerLoad = async (event) => {
-	requireAdmin(event);
+	await requireAdminCached(event);
 	return {
-		siteSettings: getSiteSettings(),
-		stackItems: getStackItems(),
+		siteSettings: await getSiteSettings(),
+		stackItems: await getStackItems(),
 		csrfToken: getCsrfToken(event)
 	};
 };
 
 export const actions: Actions = {
 	updateStackSection: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updateStackSection', message: 'Invalid CSRF token.' });
 		}
 
-			const current = getSiteSettings();
+			const current = await getSiteSettings();
 			const { id: _id, ...rest } = current;
 			void _id;
-			updateSiteSettings({
+			await updateSiteSettings({
 			...rest,
 			stackTitle: String(data.get('stackTitle') ?? '').trim(),
 			stackIntro: String(data.get('stackIntro') ?? '').trim()
@@ -47,7 +47,7 @@ export const actions: Actions = {
 		return { success: true, message: 'Stack section saved.', action: 'updateStackSection' };
 	},
 	createStack: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'createStack', message: 'Invalid CSRF token.' });
@@ -60,11 +60,11 @@ export const actions: Actions = {
 			return fail(400, { action: 'createStack', message: 'Label is required.', fieldErrors: { label: 'Label is required.' } });
 		}
 
-		createStackItem(label, detail || null, category || null, parseNumber(data.get('sort')));
+		await createStackItem(label, detail || null, category || null, parseNumber(data.get('sort')));
 		return { success: true, message: 'Stack item added.', action: 'createStack' };
 	},
 	updateStack: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updateStack', message: 'Invalid CSRF token.' });
@@ -78,11 +78,11 @@ export const actions: Actions = {
 			return fail(400, { action: 'updateStack', message: 'Label is required.', itemId: id, fieldErrors: { label: 'Label is required.' } });
 		}
 
-		updateStackItem(id, label, detail || null, category || null, parseNumber(data.get('sort')));
+		await updateStackItem(id, label, detail || null, category || null, parseNumber(data.get('sort')));
 		return { success: true, message: 'Stack item updated.', action: 'updateStack', itemId: id };
 	},
 	reorderStack: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'reorderStack', message: 'Invalid CSRF token.' });
@@ -102,11 +102,11 @@ export const actions: Actions = {
 			return fail(400, { action: 'reorderStack', message: 'Invalid stack order.' });
 		}
 
-		reorderStackItems(orderedIds);
+		await reorderStackItems(orderedIds);
 		return { success: true, message: 'Stack order updated.', action: 'reorderStack' };
 	},
 	deleteStack: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'deleteStack', message: 'Invalid CSRF token.' });
@@ -115,7 +115,7 @@ export const actions: Actions = {
 		if (id <= 0) {
 			return fail(400, { action: 'deleteStack', message: 'Invalid item.' });
 		}
-		deleteStackItem(id);
+		await deleteStackItem(id);
 		return { success: true, message: 'Stack item deleted.', action: 'deleteStack', itemId: id };
 	}
 };

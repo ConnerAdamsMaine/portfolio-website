@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { createTrackingEvent } from '$lib/server/db';
+import { createTrackingEvent } from '$lib/server/telemetryStore';
 import { rateLimit } from '$lib/server/rateLimit';
 
 const MAX_REQUEST_BYTES = 8_192;
@@ -90,7 +90,7 @@ export const POST: RequestHandler = async (event) => {
 	}
 
 	const ip = event.getClientAddress();
-	if (!rateLimit(`tracking-events:${ip}`, { windowMs: 60_000, max: 120 })) {
+	if (!(await rateLimit(`tracking-events:${ip}`, { windowMs: 60_000, max: 120 }))) {
 		return new Response(JSON.stringify({ ok: false, message: 'Rate limit exceeded.' }), {
 			status: 429,
 			headers: { 'Content-Type': 'application/json' }
@@ -109,7 +109,7 @@ export const POST: RequestHandler = async (event) => {
 	const safeIp = normalizeText(ip, 80);
 
 	try {
-		createTrackingEvent(type, name, pathValue, referrer, userAgent, safeIp, raw);
+		await createTrackingEvent(type, name, pathValue, referrer, userAgent, safeIp, raw);
 	} catch {
 		// Ignore tracking failures.
 	}

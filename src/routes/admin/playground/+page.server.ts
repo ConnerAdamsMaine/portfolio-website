@@ -8,9 +8,10 @@ import {
 	getRecentPlaygroundLogs,
 	getRecentPlaygroundSessions,
 	updatePlayset
-} from '$lib/server/db';
-import { requireAdmin } from '$lib/server/auth';
+} from '$lib/server/dataStore';
+import { requireAdminCached } from '$lib/server/auth';
 import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
+import { getOrSetCached, invalidateCachedPrefix } from '$lib/server/cache';
 import { playgroundConfig } from '$lib/server/playground/config';
 import {
 	getPlaygroundRuntimeSnapshot,
@@ -100,8 +101,15 @@ const validatePlaysetFields = (
 };
 
 export const load: PageServerLoad = async (event) => {
-	requireAdmin(event);
+	await requireAdminCached(event);
 	ensurePlaygroundWebSocketServer();
+	const status = await getOrSetCached('playground:status:admin-dashboard', 5, async () => ({
+		playsets: await getPlaysets(),
+		counts: await getPlaygroundOperationalCounts(),
+		runtime: getPlaygroundRuntimeSnapshot(),
+		recentSessions: await getRecentPlaygroundSessions(120),
+		recentLogs: await getRecentPlaygroundLogs(200)
+	}));
 
 	return {
 		playgroundConfig: {
@@ -109,18 +117,18 @@ export const load: PageServerLoad = async (event) => {
 			runtimeMode: playgroundConfig.runtimeMode,
 			wsUrl: getPlaygroundWsClientUrl(event.url)
 		},
-		playsets: getPlaysets(),
-		counts: getPlaygroundOperationalCounts(),
-		runtime: getPlaygroundRuntimeSnapshot(),
-		recentSessions: getRecentPlaygroundSessions(120),
-		recentLogs: getRecentPlaygroundLogs(200),
+		playsets: status.playsets,
+		counts: status.counts,
+		runtime: status.runtime,
+		recentSessions: status.recentSessions,
+		recentLogs: status.recentLogs,
 		csrfToken: getCsrfToken(event)
 	};
 };
 
 export const actions: Actions = {
 	createPlayset: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'createPlayset', message: 'Invalid CSRF token.' });
@@ -155,7 +163,7 @@ export const actions: Actions = {
 			});
 		}
 
-		createPlayset(
+		await createPlayset(
 			name,
 			runtime,
 			description,
@@ -167,6 +175,7 @@ export const actions: Actions = {
 			idleTimeoutSeconds,
 			slug
 		);
+		await invalidateCachedPrefix('playground:status:');
 
 		return {
 			action: 'createPlayset',
@@ -175,7 +184,7 @@ export const actions: Actions = {
 		};
 	},
 	updatePlayset: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updatePlayset', message: 'Invalid CSRF token.' });
@@ -216,7 +225,7 @@ export const actions: Actions = {
 			});
 		}
 
-		updatePlayset(
+		await updatePlayset(
 			id,
 			name,
 			runtime,
@@ -229,6 +238,7 @@ export const actions: Actions = {
 			idleTimeoutSeconds,
 			slug
 		);
+		await invalidateCachedPrefix('playground:status:');
 
 		return {
 			action: 'updatePlayset',
@@ -238,7 +248,7 @@ export const actions: Actions = {
 		};
 	},
 	deletePlayset: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'deletePlayset', message: 'Invalid CSRF token.' });
@@ -249,7 +259,8 @@ export const actions: Actions = {
 			return fail(400, { action: 'deletePlayset', message: 'Invalid playset id.' });
 		}
 
-		deletePlayset(id);
+		await deletePlayset(id);
+		await invalidateCachedPrefix('playground:status:');
 		return {
 			action: 'deletePlayset',
 			itemId: id,
@@ -258,7 +269,7 @@ export const actions: Actions = {
 		};
 	},
 	stopByPlayset: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'stopByPlayset', message: 'Invalid CSRF token.' });
@@ -268,6 +279,7 @@ export const actions: Actions = {
 			return fail(400, { action: 'stopByPlayset', message: 'Invalid playset id.' });
 		}
 		const stoppedCount = await terminateSessionsByPlayset(playsetId, 'admin-playset-shutdown');
+		await invalidateCachedPrefix('playground:status:');
 		return {
 			action: 'stopByPlayset',
 			itemId: playsetId,
@@ -276,7 +288,7 @@ export const actions: Actions = {
 		};
 	},
 	stopBySession: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'stopBySession', message: 'Invalid CSRF token.' });
@@ -286,6 +298,7 @@ export const actions: Actions = {
 			return fail(400, { action: 'stopBySession', message: 'Session id is required.' });
 		}
 		const stopped = await terminateSession(sessionId, 'admin-session-shutdown');
+		await invalidateCachedPrefix('playground:status:');
 		return {
 			action: 'stopBySession',
 			success: stopped,
@@ -293,7 +306,7 @@ export const actions: Actions = {
 		};
 	},
 	stopBySocket: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'stopBySocket', message: 'Invalid CSRF token.' });
@@ -303,6 +316,7 @@ export const actions: Actions = {
 			return fail(400, { action: 'stopBySocket', message: 'Websocket id is required.' });
 		}
 		const stopped = await terminateSessionBySocketId(wsId, 'admin-websocket-shutdown');
+		await invalidateCachedPrefix('playground:status:');
 		return {
 			action: 'stopBySocket',
 			success: stopped,
@@ -310,12 +324,13 @@ export const actions: Actions = {
 		};
 	},
 	stopAll: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'stopAll', message: 'Invalid CSRF token.' });
 		}
 		const stoppedCount = await terminateAllSessions('admin-global-shutdown');
+		await invalidateCachedPrefix('playground:status:');
 		return {
 			action: 'stopAll',
 			success: true,

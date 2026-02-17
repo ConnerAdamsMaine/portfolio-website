@@ -1,6 +1,6 @@
 # 404connernotfound Portfolio
 
-SvelteKit + Tailwind portfolio site with an admin UI backed by SQLite.
+SvelteKit + Tailwind portfolio site with an admin UI, PostgreSQL-first storage (with SQLite fallback), and Redis-backed caching/rate limiting.
 
 ## Requirements
 - Node `24.13.0` (see `.nvmrc` / `package.json` `engines`)
@@ -9,11 +9,18 @@ SvelteKit + Tailwind portfolio site with an admin UI backed by SQLite.
 ## Setup
 1. `npm install`
 2. Copy `.env.example` to `.env` and update values.
-3. Initialize the database (recommended for production): `npm run db:seed`
+3. Optional local infrastructure (PostgreSQL + Redis with persistent volumes): `docker compose -f docker-compose.local.yml up -d`
+4. Initialize the SQLite content database (recommended for production): `npm run db:seed`
+5. Optional: backfill SQLite data into PostgreSQL: `npm run db:migrate:postgres`
 
 ## Environment Variables
-- `DB_PATH`: SQLite file path (relative to project root if not absolute)
-- `DB_AUTO_SEED`: Auto-create/seed tables on startup (`true` in dev by default)
+- `DATABASE_URL`: PostgreSQL connection string used for full app storage (content/admin/telemetry)
+- `PG_SSL`: Enable SSL for PostgreSQL (`true` / `false`)
+- `PG_POOL_MAX`: Maximum PostgreSQL connection pool size
+- `REDIS_URL`: Redis connection string for distributed rate limiting and caching
+- `REDIS_PREFIX`: Redis key prefix (default `portfolio:`)
+- `DB_PATH`: SQLite file path for fallback/local data storage (relative to project root if not absolute)
+- `DB_AUTO_SEED`: Auto-create/seed tables on startup (`true` in dev by default; set `false` in production)
 - `ADMIN_SESSION_SECRET`: HMAC secret for admin sessions
 - `ADMIN_SESSION_VERSION`: Bump to revoke existing admin sessions
 - `ADMIN_EMAIL`: Admin login email
@@ -54,9 +61,21 @@ You can also use `npm run preview` to test the production build locally.
 - Playground operations: `/admin/playground`
 
 ## Lead Capture
-- `POST /contact` and `POST /collaborate` submissions are persisted in SQLite (`inbound_messages` table)
-- `POST /subscribe` upserts subscribers in SQLite (`newsletter_subscriptions` table)
+- `POST /contact` and `POST /collaborate` submissions are persisted in PostgreSQL when `DATABASE_URL` is configured (fallback: SQLite)
+- `POST /subscribe` upserts subscribers in PostgreSQL when `DATABASE_URL` is configured (fallback: SQLite)
 - Optional webhook notifications are sent when `LEAD_WEBHOOK_URL` is configured
+
+## Tracking
+- `/tracking/events` and `/tracking/pixel` persist tracking data in PostgreSQL when configured (fallback: SQLite)
+- `/admin/tracking` reads counts/events from PostgreSQL when configured
+
+## Caching & Rate Limiting
+- Redis is used for distributed rate limiting when `REDIS_URL` is set (fallback: in-memory limiter)
+- Redis is used to cache selected server responses (layout/home/about/work/blog/rss/sitemap) with short TTLs
+- Admin session validation uses Redis-backed token decision caching to reduce repeated signature checks
+- Playground status snapshots (counts/sessions/logs/playsets) are cached in Redis and invalidated on lifecycle changes
+- Tracking counts/event lists are cached in Redis and invalidated on new tracking events
+- Content cache keys are invalidated on related admin writes (site settings, stack, work, posts, footer, playsets)
 
 ## Playground
 - User page: `/playground`
@@ -68,6 +87,7 @@ You can also use `npm run preview` to test the production build locally.
 - `npm run lint` / `npm run lint:fix`
 - `npm run format` / `npm run format:write`
 - `npm run db:seed` — explicit schema/bootstrap step
+- `npm run db:migrate:postgres` — backfill all SQLite tables into PostgreSQL with upserts
 
 ## Deployment Notes
 - Sample Nginx config: `nginx/portfolio.conf`

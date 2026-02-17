@@ -1,5 +1,5 @@
 import type { Handle } from '@sveltejs/kit';
-import { getSiteSettings } from '$lib/server/db';
+import { getSiteSettings } from '$lib/server/dataStore';
 
 const shouldBypassMaintenance = (pathname: string) =>
 	pathname.startsWith('/admin') || pathname === '/maintenance';
@@ -12,7 +12,7 @@ const statusOverride = (pathname: string) => {
 };
 
 export const handle: Handle = async ({ event, resolve }) => {
-	const settings = getSiteSettings();
+	const settings = await getSiteSettings();
 	const pathname = event.url.pathname;
 
 	if (settings.maintenanceEnabled === 1 && !shouldBypassMaintenance(pathname)) {

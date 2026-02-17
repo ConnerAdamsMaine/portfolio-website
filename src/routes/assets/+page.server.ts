@@ -1,8 +1,8 @@
 import type { PageServerLoad } from './$types';
-import { getPublicAssets } from '$lib/server/db';
+import { getPublicAssets } from '$lib/server/dataStore';
 
 export const load: PageServerLoad = async () => {
 	return {
-		assets: getPublicAssets()
+		assets: await getPublicAssets()
 	};
 };

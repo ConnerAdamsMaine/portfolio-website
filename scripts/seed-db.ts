@@ -1,7 +1,7 @@
-import { seedDatabase } from '../src/lib/server/db.ts';
+import { seedDatabase } from '../src/lib/server/dataStore.ts';
 
 try {
-	seedDatabase();
+	await seedDatabase();
 	// eslint-disable-next-line no-console
 	console.log('Database initialized.');
 } catch (error) {

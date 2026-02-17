@@ -1,6 +1,6 @@
 import type { Actions } from './$types';
 import { fail } from '@sveltejs/kit';
-import { createTestimonial } from '$lib/server/db';
+import { createTestimonial } from '$lib/server/dataStore';
 
 const isValidEmail = (value: string) => /\S+@\S+\.\S+/.test(value);
 
@@ -26,7 +26,7 @@ export const actions: Actions = {
 			return fail(400, { message: 'Please confirm you have permission to share this.' });
 		}
 
-		createTestimonial(
+		await createTestimonial(
 			name,
 			role || null,
 			company || null,

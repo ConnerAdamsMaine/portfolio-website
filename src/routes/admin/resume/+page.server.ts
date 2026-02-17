@@ -1,6 +1,6 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
-import { requireAdmin } from '$lib/server/auth';
+import { requireAdminCached } from '$lib/server/auth';
 import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,7 +22,7 @@ const getResumeMeta = () => {
 };
 
 export const load: PageServerLoad = async (event) => {
-	requireAdmin(event);
+	await requireAdminCached(event);
 	return {
 		csrfToken: getCsrfToken(event),
 		resume: getResumeMeta()
@@ -31,7 +31,7 @@ export const load: PageServerLoad = async (event) => {
 
 export const actions: Actions = {
 	upload: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { message: 'Invalid CSRF token.' });

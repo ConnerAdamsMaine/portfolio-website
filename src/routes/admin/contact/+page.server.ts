@@ -1,7 +1,7 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
-import { getSiteSettings, updateSiteSettings } from '$lib/server/db';
-import { requireAdmin } from '$lib/server/auth';
+import { getSiteSettings, updateSiteSettings } from '$lib/server/dataStore';
+import { requireAdminCached } from '$lib/server/auth';
 import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
 
 const isValidEmail = (value: string) => /\S+@\S+\.\S+/.test(value);
@@ -17,16 +17,16 @@ const isSafeUrl = (value: string) => {
 };
 
 export const load: PageServerLoad = async (event) => {
-	requireAdmin(event);
+	await requireAdminCached(event);
 	return {
-		siteSettings: getSiteSettings(),
+		siteSettings: await getSiteSettings(),
 		csrfToken: getCsrfToken(event)
 	};
 };
 
 export const actions: Actions = {
 	updateContact: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { message: 'Invalid CSRF token.' });
@@ -41,11 +41,11 @@ export const actions: Actions = {
 			return fail(400, { message: 'GitHub URL must be http(s), mailto, or a relative path.' });
 		}
 
-			const current = getSiteSettings();
+			const current = await getSiteSettings();
 			const { id: _id, ...rest } = current;
 			void _id;
 
-			updateSiteSettings({
+			await updateSiteSettings({
 			...rest,
 			contactTitle: String(data.get('contactTitle') ?? '').trim(),
 			contactBody: String(data.get('contactBody') ?? '').trim(),

@@ -1,12 +1,13 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail } from '@sveltejs/kit';
-import { createInboundMessage, getSiteSettings } from '$lib/server/db';
+import { getSiteSettings } from '$lib/server/dataStore';
+import { createInboundMessage } from '$lib/server/telemetryStore';
 import { sendLeadNotification } from '$lib/server/leadNotifications';
 import { rateLimit } from '$lib/server/rateLimit';
 
 export const load: PageServerLoad = async () => {
 	return {
-		siteSettings: getSiteSettings()
+		siteSettings: await getSiteSettings()
 	};
 };
 
@@ -18,7 +19,7 @@ const MAX_SCOPE_LENGTH = 10_000;
 export const actions: Actions = {
 	send: async (event) => {
 		const ip = event.getClientAddress();
-		if (!rateLimit(`collaborate-form:${ip}`, { windowMs: 10 * 60 * 1000, max: 6 })) {
+		if (!(await rateLimit(`collaborate-form:${ip}`, { windowMs: 10 * 60 * 1000, max: 6 }))) {
 			return fail(429, { message: 'Too many submissions. Please try again in a few minutes.' });
 		}
 
@@ -46,7 +47,7 @@ export const actions: Actions = {
 
 		try {
 			const userAgent = request.headers.get('user-agent');
-			createInboundMessage(
+			await createInboundMessage(
 				'collaborate',
 				name,
 				email,

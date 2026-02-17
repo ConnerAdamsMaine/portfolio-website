@@ -9,8 +9,8 @@ import {
 	createWorkItem,
 	updateWorkItem,
 	deleteWorkItem
-} from '$lib/server/db';
-import { requireAdmin } from '$lib/server/auth';
+} from '$lib/server/dataStore';
+import { requireAdminCached } from '$lib/server/auth';
 import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
 
 const MAX_LENGTHS = {
@@ -100,25 +100,25 @@ const deleteWorkImage = (publicPath: string | null) => {
 };
 
 export const load: PageServerLoad = async (event) => {
-	requireAdmin(event);
+	await requireAdminCached(event);
 	return {
-		siteSettings: getSiteSettings(),
-		workItems: getWorkItems(),
+		siteSettings: await getSiteSettings(),
+		workItems: await getWorkItems(),
 		csrfToken: getCsrfToken(event)
 	};
 };
 
 export const actions: Actions = {
 	updateWorkSection: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updateWorkSection', message: 'Invalid CSRF token.' });
 		}
-			const current = getSiteSettings();
+			const current = await getSiteSettings();
 			const { id: _id, ...rest } = current;
 			void _id;
-			updateSiteSettings({
+			await updateSiteSettings({
 			...rest,
 			workTitle: String(data.get('workTitle') ?? '').trim(),
 			workIntro: String(data.get('workIntro') ?? '').trim()
@@ -126,7 +126,7 @@ export const actions: Actions = {
 		return { success: true, message: 'Work section saved.', action: 'updateWorkSection' };
 	},
 	createWork: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'createWork', message: 'Invalid CSRF token.' });
@@ -175,7 +175,7 @@ export const actions: Actions = {
 
 		const imagePath = imageFile ? await saveWorkImage(imageFile) : null;
 
-		createWorkItem(
+		await createWorkItem(
 			title,
 			description,
 			longDescription,
@@ -192,7 +192,7 @@ export const actions: Actions = {
 		return { success: true, message: 'Work item added.', action: 'createWork' };
 	},
 	updateWork: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updateWork', message: 'Invalid CSRF token.' });
@@ -210,7 +210,7 @@ export const actions: Actions = {
 		const imageFile = parseImageFile(data.get('image'));
 		const removeImage = data.getAll('removeImage').some((value) => value === '1');
 		const errors: Record<string, string> = {};
-		const current = getWorkItems().find((item) => item.id === id);
+		const current = (await getWorkItems()).find((item) => item.id === id);
 
 		if (id <= 0) errors.id = 'Invalid item.';
 		if (!current) errors.id = 'Work item not found.';
@@ -260,7 +260,7 @@ export const actions: Actions = {
 			deleteWorkImage(current.imagePath);
 		}
 
-		updateWorkItem(
+		await updateWorkItem(
 			id,
 			title,
 			description,
@@ -278,7 +278,7 @@ export const actions: Actions = {
 		return { success: true, message: 'Work item updated.', action: 'updateWork', itemId: id };
 	},
 	deleteWork: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'deleteWork', message: 'Invalid CSRF token.' });
@@ -287,8 +287,8 @@ export const actions: Actions = {
 		if (id <= 0) {
 			return fail(400, { action: 'deleteWork', message: 'Invalid item.' });
 		}
-		const current = getWorkItems().find((item) => item.id === id);
-		deleteWorkItem(id);
+		const current = (await getWorkItems()).find((item) => item.id === id);
+		await deleteWorkItem(id);
 		if (current?.imagePath) {
 			deleteWorkImage(current.imagePath);
 		}

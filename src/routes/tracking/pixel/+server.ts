@@ -1,5 +1,5 @@
 import type { RequestHandler } from './$types';
-import { createTrackingEvent } from '$lib/server/db';
+import { createTrackingEvent } from '$lib/server/telemetryStore';
 import { rateLimit } from '$lib/server/rateLimit';
 
 const PIXEL_BASE64 = 'R0lGODlhAQABAPAAAAAAAAAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
@@ -45,7 +45,7 @@ export const GET: RequestHandler = async (event) => {
 	}
 
 	const ip = event.getClientAddress();
-	if (!rateLimit(`tracking-pixel:${ip}`, { windowMs: 60_000, max: 240 })) {
+	if (!(await rateLimit(`tracking-pixel:${ip}`, { windowMs: 60_000, max: 240 }))) {
 		return new Response('Too Many Requests', { status: 429 });
 	}
 
@@ -64,7 +64,7 @@ export const GET: RequestHandler = async (event) => {
 	const safeIp = normalizeText(ip, 80);
 
 	try {
-		createTrackingEvent(
+		await createTrackingEvent(
 			'pixel',
 			name,
 			pathValue,

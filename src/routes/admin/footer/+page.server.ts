@@ -7,8 +7,8 @@ import {
 	createFooterLink,
 	updateFooterLink,
 	deleteFooterLink
-} from '$lib/server/db';
-import { requireAdmin } from '$lib/server/auth';
+} from '$lib/server/dataStore';
+import { requireAdminCached } from '$lib/server/auth';
 import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
 
 const parseNumber = (value: FormDataEntryValue | null, fallback = 0) => {
@@ -37,17 +37,17 @@ const isSafeUrl = (value: string) => {
 };
 
 export const load: PageServerLoad = async (event) => {
-	requireAdmin(event);
+	await requireAdminCached(event);
 	return {
-		siteSettings: getSiteSettings(),
-		footerLinks: getFooterLinks(),
+		siteSettings: await getSiteSettings(),
+		footerLinks: await getFooterLinks(),
 		csrfToken: getCsrfToken(event)
 	};
 };
 
 export const actions: Actions = {
 	updateFooterCopy: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updateFooterCopy', message: 'Invalid CSRF token.' });
@@ -68,10 +68,10 @@ export const actions: Actions = {
 			});
 		}
 
-			const current = getSiteSettings();
+			const current = await getSiteSettings();
 			const { id: _id, ...rest } = current;
 			void _id;
-			updateSiteSettings({
+			await updateSiteSettings({
 			...rest,
 			footerBadge: String(data.get('footerBadge') ?? '').trim(),
 			footerHeadline: String(data.get('footerHeadline') ?? '').trim(),
@@ -83,7 +83,7 @@ export const actions: Actions = {
 		return { success: true, message: 'Footer copy saved.', action: 'updateFooterCopy' };
 	},
 	createFooterLink: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'createFooterLink', message: 'Invalid CSRF token.' });
@@ -102,11 +102,11 @@ export const actions: Actions = {
 			return fail(400, { action: 'createFooterLink', message: 'Check the highlighted fields.', fieldErrors: errors });
 		}
 
-		createFooterLink(section, label, href, parseCheckbox(data, 'external'), parseNumber(data.get('sort')));
+		await createFooterLink(section, label, href, parseCheckbox(data, 'external'), parseNumber(data.get('sort')));
 		return { success: true, message: 'Footer link added.', action: 'createFooterLink' };
 	},
 	updateFooterLink: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updateFooterLink', message: 'Invalid CSRF token.' });
@@ -127,11 +127,11 @@ export const actions: Actions = {
 			return fail(400, { action: 'updateFooterLink', message: 'Check the highlighted fields.', fieldErrors: errors, itemId: id });
 		}
 
-		updateFooterLink(id, section, label, href, parseCheckbox(data, 'external'), parseNumber(data.get('sort')));
+		await updateFooterLink(id, section, label, href, parseCheckbox(data, 'external'), parseNumber(data.get('sort')));
 		return { success: true, message: 'Footer link updated.', action: 'updateFooterLink', itemId: id };
 	},
 	deleteFooterLink: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'deleteFooterLink', message: 'Invalid CSRF token.' });
@@ -140,7 +140,7 @@ export const actions: Actions = {
 		if (id <= 0) {
 			return fail(400, { action: 'deleteFooterLink', message: 'Invalid link.' });
 		}
-		deleteFooterLink(id);
+		await deleteFooterLink(id);
 		return { success: true, message: 'Footer link deleted.', action: 'deleteFooterLink', itemId: id };
 	}
 };

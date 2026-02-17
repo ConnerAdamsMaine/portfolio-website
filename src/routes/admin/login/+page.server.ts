@@ -1,11 +1,11 @@
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
 import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
-import { isAdminAuthenticated, setAdminSession, verifyAdminCredentials } from '$lib/server/auth';
+import { isAdminAuthenticatedCached, setAdminSession, verifyAdminCredentials } from '$lib/server/auth';
 import { rateLimit } from '$lib/server/rateLimit';
 
 export const load: PageServerLoad = async (event) => {
-	if (isAdminAuthenticated(event)) {
+	if (await isAdminAuthenticatedCached(event)) {
 		throw redirect(303, '/admin');
 	}
 
@@ -17,7 +17,7 @@ export const load: PageServerLoad = async (event) => {
 export const actions: Actions = {
 	default: async (event) => {
 		const ip = event.getClientAddress();
-		if (!rateLimit(`admin-login:${ip}`, { windowMs: 10 * 60 * 1000, max: 5 })) {
+		if (!(await rateLimit(`admin-login:${ip}`, { windowMs: 10 * 60 * 1000, max: 5 }))) {
 			return fail(429, { message: 'Too many login attempts. Try again later.' });
 		}
 

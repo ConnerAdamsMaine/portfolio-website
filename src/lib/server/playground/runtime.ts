@@ -14,7 +14,8 @@ import {
 	getPlaysetById,
 	type Playset,
 	updatePlaygroundSessionStatus
-} from '$lib/server/db';
+} from '$lib/server/dataStore';
+import { invalidateCachedPrefix } from '$lib/server/cache';
 import { playgroundConfig } from '$lib/server/playground/config';
 import type { PlaygroundWsClientMessage, PlaygroundWsServerMessage } from '$lib/playground/types';
 
@@ -52,6 +53,9 @@ type RunCommandResult = {
 const execFileAsync = promisify(execFile);
 const sessions = new Map<string, RuntimeSession>();
 const sockets = new Map<string, RuntimeSocket>();
+const invalidatePlaygroundStatusCache = () => {
+	void invalidateCachedPrefix('playground:status:');
+};
 
 const safeJson = (value: unknown) => {
 	try {
@@ -106,14 +110,7 @@ const emitSessionLog = (
 	};
 
 	try {
-		createPlaygroundLog(
-			session.sessionId,
-			wsId,
-			level,
-			event,
-			message,
-			entry.payload
-		);
+		void createPlaygroundLog(session.sessionId, wsId, level, event, message, entry.payload);
 	} catch (error) {
 		console.error('[playground] failed to persist log', error);
 	}
@@ -232,7 +229,7 @@ const bootSession = async (session: RuntimeSession) => {
 	if (playgroundConfig.runtimeMode === 'mock') {
 		session.status = 'active';
 		session.reason = null;
-		updatePlaygroundSessionStatus(session.sessionId, 'active', { containerId: null, reason: null });
+		await updatePlaygroundSessionStatus(session.sessionId, 'active', { containerId: null, reason: null });
 		emitSessionLog(
 			session,
 			null,
@@ -240,6 +237,7 @@ const bootSession = async (session: RuntimeSession) => {
 			'session-active',
 			`Session is active in ${playgroundConfig.runtimeMode} mode.`
 		);
+		invalidatePlaygroundStatusCache();
 		return;
 	}
 
@@ -247,10 +245,11 @@ const bootSession = async (session: RuntimeSession) => {
 	session.containerId = containerId;
 	session.status = 'active';
 	session.reason = null;
-	updatePlaygroundSessionStatus(session.sessionId, 'active', { containerId, reason: null });
+	await updatePlaygroundSessionStatus(session.sessionId, 'active', { containerId, reason: null });
 	emitSessionLog(session, null, 'info', 'session-active', 'Session container is running.', {
 		containerId
 	});
+	invalidatePlaygroundStatusCache();
 };
 
 const validateSessionToken = (sessionId: string, joinToken: string) => {
@@ -268,7 +267,7 @@ export const createRuntimeSession = async (
 		throw new Error('Playground is disabled.');
 	}
 
-	const playset = getPlaysetById(playsetId);
+	const playset = await getPlaysetById(playsetId);
 	if (!playset) {
 		throw new Error('Playset not found.');
 	}
@@ -276,14 +275,15 @@ export const createRuntimeSession = async (
 		throw new Error('Playset is disabled.');
 	}
 
-	const activeCount = countActivePlaygroundSessionsForPlayset(playset.id);
+	const activeCount = await countActivePlaygroundSessionsForPlayset(playset.id);
 	if (activeCount >= playset.maxSessions) {
 		throw new Error('Playset is at capacity. Try again shortly.');
 	}
 
 	const sessionId = crypto.randomUUID();
 	const joinToken = crypto.randomBytes(24).toString('base64url');
-	createPlaygroundSession(sessionId, playset.id, joinToken, clientIp, userAgent, 'starting');
+	await createPlaygroundSession(sessionId, playset.id, joinToken, clientIp, userAgent, 'starting');
+	invalidatePlaygroundStatusCache();
 
 	const runtimeSession: RuntimeSession = {
 		sessionId,
@@ -312,12 +312,13 @@ export const createRuntimeSession = async (
 	} catch (error) {
 		runtimeSession.status = 'failed';
 		runtimeSession.reason = error instanceof Error ? error.message : 'Failed to boot runtime.';
-		updatePlaygroundSessionStatus(runtimeSession.sessionId, 'failed', {
+		await updatePlaygroundSessionStatus(runtimeSession.sessionId, 'failed', {
 			reason: runtimeSession.reason,
 			ended: true
 		});
 		emitSessionLog(runtimeSession, null, 'error', 'session-failed', runtimeSession.reason);
 		sessions.delete(runtimeSession.sessionId);
+		invalidatePlaygroundStatusCache();
 	}
 
 	return {
@@ -332,18 +333,19 @@ export const createRuntimeSession = async (
 export const terminateSession = async (sessionId: string, reason = 'manual-shutdown') => {
 	const session = sessions.get(sessionId);
 	if (!session) {
-		const existing = getPlaygroundSessionBySessionId(sessionId);
+		const existing = await getPlaygroundSessionBySessionId(sessionId);
 		if (!existing || !['starting', 'active'].includes(existing.status)) {
 			return false;
 		}
-		updatePlaygroundSessionStatus(sessionId, 'stopped', { reason, ended: true });
-		createPlaygroundLog(sessionId, null, 'warn', 'session-stopped', `Session stopped (${reason}).`);
+		await updatePlaygroundSessionStatus(sessionId, 'stopped', { reason, ended: true });
+		await createPlaygroundLog(sessionId, null, 'warn', 'session-stopped', `Session stopped (${reason}).`);
+		invalidatePlaygroundStatusCache();
 		return true;
 	}
 
 	session.status = 'stopped';
 	session.reason = reason;
-	updatePlaygroundSessionStatus(session.sessionId, 'stopped', {
+	await updatePlaygroundSessionStatus(session.sessionId, 'stopped', {
 		containerId: session.containerId,
 		reason,
 		ended: true
@@ -361,6 +363,7 @@ export const terminateSession = async (sessionId: string, reason = 'manual-shutd
 	}
 	session.sockets.clear();
 	sessions.delete(sessionId);
+	invalidatePlaygroundStatusCache();
 	return true;
 };
 
@@ -370,12 +373,13 @@ export const terminateSessionWithToken = async (
 	reason = 'client-shutdown'
 ) => {
 	if (!validateSessionToken(sessionId, joinToken)) {
-		const dbSession = getPlaygroundSessionBySessionId(sessionId);
+		const dbSession = await getPlaygroundSessionBySessionId(sessionId);
 		if (!dbSession) return false;
 		if (!safeTokenEqual(dbSession.joinToken, joinToken)) return false;
 		if (!['starting', 'active'].includes(dbSession.status)) return false;
-		updatePlaygroundSessionStatus(sessionId, 'stopped', { reason, ended: true });
-		createPlaygroundLog(sessionId, null, 'warn', 'session-stopped', `Session stopped (${reason}).`);
+		await updatePlaygroundSessionStatus(sessionId, 'stopped', { reason, ended: true });
+		await createPlaygroundLog(sessionId, null, 'warn', 'session-stopped', `Session stopped (${reason}).`);
+		invalidatePlaygroundStatusCache();
 		return true;
 	}
 	return terminateSession(sessionId, reason);
@@ -557,7 +561,8 @@ export const attachWebSocketToSession = (
 	sockets.set(wsId, runtimeSocket);
 	touchSession(session);
 
-	createPlaygroundSocketConnection(wsId, sessionId);
+	void createPlaygroundSocketConnection(wsId, sessionId);
+	invalidatePlaygroundStatusCache();
 	emitSessionLog(session, wsId, 'info', 'ws-connected', 'Websocket connected.', {
 		remoteAddress: runtimeSocket.remoteAddress
 	});
@@ -582,7 +587,8 @@ export const attachWebSocketToSession = (
 		sockets.delete(wsId);
 		touchSession(session);
 		const reason = reasonBuffer.toString('utf8').trim() || null;
-		closePlaygroundSocketConnection(wsId, code, reason);
+		void closePlaygroundSocketConnection(wsId, code, reason);
+		invalidatePlaygroundStatusCache();
 		emitSessionLog(session, wsId, 'warn', 'ws-disconnected', 'Websocket disconnected.', {
 			code,
 			reason

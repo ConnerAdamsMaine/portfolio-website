@@ -5,8 +5,8 @@ import {
 	createAsset,
 	updateAsset,
 	deleteAsset
-} from '$lib/server/db';
-import { requireAdmin } from '$lib/server/auth';
+} from '$lib/server/dataStore';
+import { requireAdminCached } from '$lib/server/auth';
 import { getCsrfToken, validateCsrfToken } from '$lib/server/csrf';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,16 +21,16 @@ const sanitizeFilename = (value: string) =>
 		.replace(/^-+|-+$/g, '') || 'asset';
 
 export const load: PageServerLoad = async (event) => {
-	requireAdmin(event);
+	await requireAdminCached(event);
 	return {
-		assets: getAssets(),
+		assets: await getAssets(),
 		csrfToken: getCsrfToken(event)
 	};
 };
 
 export const actions: Actions = {
 	createAsset: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'createAsset', message: 'Invalid CSRF token.' });
@@ -49,7 +49,7 @@ export const actions: Actions = {
 		const buffer = Buffer.from(await file.arrayBuffer());
 		fs.writeFileSync(path.join(ASSET_DIR, filename), buffer);
 
-		createAsset(
+		await createAsset(
 			label,
 			filename,
 			`/assets/uploads/${filename}`,
@@ -61,7 +61,7 @@ export const actions: Actions = {
 		return { success: true, message: 'Asset uploaded.', action: 'createAsset' };
 	},
 	updateAsset: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'updateAsset', message: 'Invalid CSRF token.' });
@@ -75,11 +75,11 @@ export const actions: Actions = {
 			return fail(400, { action: 'updateAsset', message: 'Label is required.', itemId: id });
 		}
 		const isPublic = data.getAll('public').some((value) => value === '1') ? 1 : 0;
-		updateAsset(id, label, isPublic);
+		await updateAsset(id, label, isPublic);
 		return { success: true, message: 'Asset updated.', action: 'updateAsset', itemId: id };
 	},
 	deleteAsset: async (event) => {
-		requireAdmin(event);
+		await requireAdminCached(event);
 		const data = await event.request.formData();
 		if (!validateCsrfToken(event, data)) {
 			return fail(403, { action: 'deleteAsset', message: 'Invalid CSRF token.' });
@@ -88,7 +88,7 @@ export const actions: Actions = {
 		if (!id) {
 			return fail(400, { action: 'deleteAsset', message: 'Invalid asset.' });
 		}
-		const assets = getAssets();
+		const assets = await getAssets();
 		const asset = assets.find((item) => item.id === id);
 		if (asset) {
 			const filePath = path.resolve('static', asset.path.replace(/^\//, ''));
@@ -96,7 +96,7 @@ export const actions: Actions = {
 				fs.unlinkSync(filePath);
 			}
 		}
-		deleteAsset(id);
+		await deleteAsset(id);
 		return { success: true, message: 'Asset deleted.', action: 'deleteAsset', itemId: id };
 	}
 };
