@@ -43,24 +43,30 @@
 </section>
 
 <section class="section-pad">
-	<div class="grid gap-6 md:grid-cols-5">
+	<div class="grid gap-6 md:grid-cols-6">
 		<MotionReveal className="card space-y-2">
 			<p class="text-xs uppercase tracking-[0.2em] text-ink-200">Runtime mode</p>
 			<p class="text-2xl font-semibold text-white">{data.playgroundConfig.runtimeMode}</p>
 		</MotionReveal>
 		<MotionReveal delay={0.04} className="card space-y-2">
+			<p class="text-xs uppercase tracking-[0.2em] text-ink-200">Runtime status</p>
+			<p class={`text-2xl font-semibold ${data.playgroundConfig.enabled ? 'text-aurora-200' : 'text-red-200'}`}>
+				{data.playgroundConfig.enabled ? 'Enabled' : 'Disabled'}
+			</p>
+		</MotionReveal>
+		<MotionReveal delay={0.08} className="card space-y-2">
 			<p class="text-xs uppercase tracking-[0.2em] text-ink-200">Live sessions</p>
 			<p class="text-2xl font-semibold text-white">{data.counts.activeSessions}</p>
 		</MotionReveal>
-		<MotionReveal delay={0.08} className="card space-y-2">
+		<MotionReveal delay={0.12} className="card space-y-2">
 			<p class="text-xs uppercase tracking-[0.2em] text-ink-200">Active sockets</p>
 			<p class="text-2xl font-semibold text-white">{data.counts.activeSocketConnections}</p>
 		</MotionReveal>
-		<MotionReveal delay={0.12} className="card space-y-2">
+		<MotionReveal delay={0.16} className="card space-y-2">
 			<p class="text-xs uppercase tracking-[0.2em] text-ink-200">Total sessions</p>
 			<p class="text-2xl font-semibold text-white">{data.counts.totalSessions}</p>
 		</MotionReveal>
-		<MotionReveal delay={0.16} className="card space-y-2">
+		<MotionReveal delay={0.2} className="card space-y-2">
 			<p class="text-xs uppercase tracking-[0.2em] text-ink-200">Failed sessions</p>
 			<p class="text-2xl font-semibold text-white">{data.counts.failedSessions}</p>
 		</MotionReveal>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, tick } from 'svelte';
 	import MotionReveal from '$lib/components/MotionReveal.svelte';
 	import SeoHead from '$lib/components/SeoHead.svelte';
 	import AdminModal from '$lib/components/AdminModal.svelte';
@@ -42,8 +42,10 @@
 	let isRunningCommand = false;
 	let hasAcceptedUsage = false;
 	let usageModalOpen = !data.playgroundLocked;
+	let consoleModalOpen = false;
 	let errorMessage = '';
 	let consoleLines: ConsoleLine[] = [];
+	let consoleViewport: HTMLDivElement | null = null;
 
 	const appendLine = (level: ConsoleLine['level'], message: string) => {
 		const entry: ConsoleLine = {
@@ -52,7 +54,11 @@
 			level,
 			message
 		};
-		consoleLines = [entry, ...consoleLines].slice(0, 240);
+		consoleLines = [...consoleLines, entry].slice(-240);
+		void tick().then(() => {
+			if (!consoleViewport) return;
+			consoleViewport.scrollTop = consoleViewport.scrollHeight;
+		});
 	};
 
 	const selectedPlayset = () => data.playsets.find((item) => item.id === selectedPlaysetId) ?? null;
@@ -165,6 +171,7 @@
 			consoleLines = [];
 			appendLine('info', `Session created for ${payload.playset.name}.`);
 			connectSocket(activeSession);
+			consoleModalOpen = true;
 		} catch {
 			errorMessage = 'Unable to contact the playground service.';
 			appendLine('error', errorMessage);
@@ -193,6 +200,7 @@
 			websocketId = null;
 			connectionState = 'idle';
 			isRunningCommand = false;
+			consoleModalOpen = false;
 		}
 	};
 
@@ -204,6 +212,7 @@
 		const trimmed = command.trim();
 		if (!trimmed) return;
 		isRunningCommand = true;
+		appendLine('info', `$ ${trimmed}`);
 		socket.send(JSON.stringify({ type: 'run', command: trimmed }));
 		command = '';
 	};
@@ -278,6 +287,23 @@
 				</button>
 				<button class="nav-pill" type="button" disabled={!activeSession} on:click={stopSession}>End session</button>
 			</div>
+			<div class="grid gap-3 md:grid-cols-2">
+				<button
+					class="nav-pill"
+					type="button"
+					disabled={!activeSession}
+					on:click={() => {
+						if (activeSession) consoleModalOpen = true;
+					}}
+				>
+					Open console
+				</button>
+				{#if activeSession}
+					<p class="self-center text-sm text-ink-200">
+						Active: <span class="text-white">{activeSession.playsetName}</span>
+					</p>
+				{/if}
+			</div>
 			{#if errorMessage}
 				<p class="text-sm text-red-200">{errorMessage}</p>
 			{/if}
@@ -294,19 +320,49 @@
 		</MotionReveal>
 
 		<MotionReveal delay={0.08} className="glass p-8 space-y-5">
-			<div class="flex flex-wrap items-center justify-between gap-3">
-				<div>
-					<p class="text-xs uppercase tracking-[0.2em] text-ink-200">Console</p>
-					<h2 class="text-2xl font-semibold text-white">Session terminal</h2>
-				</div>
+			<div class="space-y-2">
+				<p class="text-xs uppercase tracking-[0.2em] text-ink-200">Console</p>
+				<h2 class="text-2xl font-semibold text-white">Modal terminal flow</h2>
+				<p class="text-sm text-ink-200">
+					After a session starts, the terminal opens in a focused modal with live websocket output.
+				</p>
 			</div>
-			<form
-				class="flex flex-col gap-3 md:flex-row"
-				on:submit|preventDefault={sendCommand}
-			>
+			{#if activeSession}
+				<div class="rounded-2xl border border-ink-200/30 bg-white/5 p-4 text-sm text-ink-200">
+					<p class="text-white">{activeSession.playsetName}</p>
+					<p class="mt-1">Session {activeSession.sessionId}</p>
+					<p class="mt-1">Connection {connectionState}</p>
+				</div>
+			{:else}
+				<p class="text-sm text-ink-200">Start a playset to launch the console modal.</p>
+			{/if}
+		</MotionReveal>
+	</div>
+</section>
+
+<AdminModal
+	open={consoleModalOpen}
+	title={activeSession ? `${activeSession.playsetName} terminal` : 'Playground terminal'}
+	description={activeSession ? `Session ${activeSession.sessionId}` : 'No active session'}
+	maxWidthClass="max-w-6xl"
+	on:close={() => {
+		consoleModalOpen = false;
+	}}
+>
+	<div class="space-y-4">
+		{#if activeSession}
+			<div class="grid gap-3 rounded-2xl border border-ink-200/30 bg-white/5 p-4 text-sm text-ink-200 md:grid-cols-4">
+				<p><span class="text-white">Runtime:</span> {activeSession.playsetRuntime}</p>
+				<p><span class="text-white">Mode:</span> {data.runtimeMode}</p>
+				<p><span class="text-white">Connection:</span> {connectionState}</p>
+				{#if websocketId}
+					<p><span class="text-white">Websocket:</span> {websocketId}</p>
+				{/if}
+			</div>
+			<form class="flex flex-col gap-3 md:flex-row" on:submit|preventDefault={sendCommand}>
 				<input
-					class="w-full rounded-2xl border border-ink-200/40 bg-white/5 px-4 py-3 text-sm text-white"
-					placeholder="Enter command (example: node -v, python --version, rustc --version)"
+					class="w-full rounded-2xl border border-ink-200/40 bg-ink-950/70 px-4 py-3 font-mono text-sm text-ink-100"
+					placeholder="run: node -v | python --version | rustc --version"
 					bind:value={command}
 					disabled={!activeSession || connectionState !== 'connected' || isRunningCommand}
 				/>
@@ -317,23 +373,34 @@
 				>
 					{isRunningCommand ? 'Running...' : 'Run'}
 				</button>
+				<button class="nav-pill" type="button" on:click={stopSession}>
+					End session
+				</button>
 			</form>
-			<div class="max-h-[32rem] overflow-auto rounded-2xl border border-ink-200/30 bg-ink-950/70 p-4 font-mono text-xs">
-				{#if consoleLines.length}
-					<ul class="space-y-3">
-						{#each consoleLines as line}
-							<li class="leading-relaxed" class:text-red-200={line.level === 'error'} class:text-amber-200={line.level === 'warn'} class:text-ink-200={line.level === 'info'}>
-								<span class="text-ink-300">[{line.timestamp}]</span> {line.message}
-							</li>
-						{/each}
-					</ul>
-				{:else}
-					<p class="text-ink-300">No logs yet. Start a session to begin streaming runtime activity.</p>
-				{/if}
-			</div>
-		</MotionReveal>
+		{/if}
+		<div
+			bind:this={consoleViewport}
+			class="max-h-[34rem] overflow-auto rounded-2xl border border-ink-200/30 bg-ink-950/90 p-4 font-mono text-xs"
+		>
+			{#if consoleLines.length}
+				<ul class="space-y-3">
+					{#each consoleLines as line}
+						<li
+							class="leading-relaxed"
+							class:text-red-200={line.level === 'error'}
+							class:text-amber-200={line.level === 'warn'}
+							class:text-ink-100={line.level === 'info'}
+						>
+							<span class="text-ink-400">[{line.timestamp}]</span> {line.message}
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="text-ink-400">No logs yet. Start a session to stream runtime output.</p>
+			{/if}
+		</div>
 	</div>
-</section>
+</AdminModal>
 
 <AdminModal
 	open={usageModalOpen}

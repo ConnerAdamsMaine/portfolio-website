@@ -1,4 +1,4 @@
-const env = process.env;
+import { env } from '$env/dynamic/private';
 
 const parseBoolean = (value: string | undefined, fallback: boolean) => {
 	if (!value) return fallback;
@@ -15,25 +15,57 @@ const parseNumber = (value: string | undefined, fallback: number, min = 1) => {
 	return Math.max(min, Math.floor(parsed));
 };
 
-const modeRaw = (env.PLAYGROUND_RUNTIME_MODE ?? 'docker').trim().toLowerCase();
-const runtimeMode = modeRaw === 'mock' ? 'mock' : 'docker';
+const parseRuntimeMode = (): PlaygroundRuntimeMode => {
+	const modeRaw = (env.PLAYGROUND_RUNTIME_MODE ?? 'docker').trim().toLowerCase();
+	return modeRaw === 'mock' ? 'mock' : 'docker';
+};
 
 export const playgroundConfig = {
-	enabled: parseBoolean(env.PLAYGROUND_ENABLED, false),
-	requireAdmin: parseBoolean(env.PLAYGROUND_REQUIRE_ADMIN, true),
-	enforceSameOrigin: parseBoolean(env.PLAYGROUND_ENFORCE_SAME_ORIGIN, true),
-	runtimeMode,
-	dockerBinary: (env.PLAYGROUND_DOCKER_BINARY ?? 'docker').trim() || 'docker',
-	wsHost: (env.PLAYGROUND_WS_HOST ?? '0.0.0.0').trim() || '0.0.0.0',
-	wsPort: parseNumber(env.PLAYGROUND_WS_PORT, 24680),
-	wsPath: (env.PLAYGROUND_WS_PATH ?? '/playground/ws').trim() || '/playground/ws',
-	wsPublicUrl: (env.PLAYGROUND_WS_PUBLIC_URL ?? '').trim() || null,
-	createRateLimitPerMinute: parseNumber(env.PLAYGROUND_CREATE_RATE_LIMIT_PER_MINUTE, 3),
-	commandTimeoutMs: parseNumber(env.PLAYGROUND_COMMAND_TIMEOUT_MS, 20_000, 1_000),
-	maxOutputBytes: parseNumber(env.PLAYGROUND_MAX_OUTPUT_BYTES, 64_000, 4_096),
-	maxCommandsPerSession: parseNumber(env.PLAYGROUND_MAX_COMMANDS_PER_SESSION, 40),
-	commandRateWindowMs: parseNumber(env.PLAYGROUND_COMMAND_RATE_WINDOW_MS, 10_000, 1_000),
-	maxCommandsPerWindow: parseNumber(env.PLAYGROUND_MAX_COMMANDS_PER_WINDOW, 8)
-} as const;
+	get enabled() {
+		return parseBoolean(env.PLAYGROUND_ENABLED, false);
+	},
+	get requireAdmin() {
+		return parseBoolean(env.PLAYGROUND_REQUIRE_ADMIN, true);
+	},
+	get enforceSameOrigin() {
+		return parseBoolean(env.PLAYGROUND_ENFORCE_SAME_ORIGIN, true);
+	},
+	get runtimeMode(): PlaygroundRuntimeMode {
+		return parseRuntimeMode();
+	},
+	get dockerBinary() {
+		return (env.PLAYGROUND_DOCKER_BINARY ?? 'docker').trim() || 'docker';
+	},
+	get wsHost() {
+		return (env.PLAYGROUND_WS_HOST ?? '0.0.0.0').trim() || '0.0.0.0';
+	},
+	get wsPort() {
+		return parseNumber(env.PLAYGROUND_WS_PORT, 24680);
+	},
+	get wsPath() {
+		return (env.PLAYGROUND_WS_PATH ?? '/playground/ws').trim() || '/playground/ws';
+	},
+	get wsPublicUrl() {
+		return (env.PLAYGROUND_WS_PUBLIC_URL ?? '').trim() || null;
+	},
+	get createRateLimitPerMinute() {
+		return parseNumber(env.PLAYGROUND_CREATE_RATE_LIMIT_PER_MINUTE, 3);
+	},
+	get commandTimeoutMs() {
+		return parseNumber(env.PLAYGROUND_COMMAND_TIMEOUT_MS, 20_000, 1_000);
+	},
+	get maxOutputBytes() {
+		return parseNumber(env.PLAYGROUND_MAX_OUTPUT_BYTES, 64_000, 4_096);
+	},
+	get maxCommandsPerSession() {
+		return parseNumber(env.PLAYGROUND_MAX_COMMANDS_PER_SESSION, 40);
+	},
+	get commandRateWindowMs() {
+		return parseNumber(env.PLAYGROUND_COMMAND_RATE_WINDOW_MS, 10_000, 1_000);
+	},
+	get maxCommandsPerWindow() {
+		return parseNumber(env.PLAYGROUND_MAX_COMMANDS_PER_WINDOW, 8);
+	}
+};
 
-export type PlaygroundRuntimeMode = (typeof playgroundConfig)['runtimeMode'];
+export type PlaygroundRuntimeMode = 'docker' | 'mock';

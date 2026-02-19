@@ -79,7 +79,7 @@
 							{/if}
 						</div>
 						<div
-							class="aspect-[4/3] rounded-2xl border border-ink-200/20 bg-white/5 shadow-soft flex items-center justify-center text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-ink-200"
+							class="media-frame aspect-[4/3] rounded-2xl border border-ink-200/20 bg-white/5 shadow-soft flex items-center justify-center text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-ink-200"
 						>
 							{#if project.imagePath}
 								<img
@@ -104,7 +104,7 @@
 				{#each otherWork as project, index}
 					<MotionReveal delay={0.07 * index} className="card">
 						<div
-							class="aspect-[4/3] rounded-2xl border border-ink-200/20 bg-white/5 shadow-soft flex items-center justify-center text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-ink-200"
+							class="media-frame aspect-[4/3] rounded-2xl border border-ink-200/20 bg-white/5 shadow-soft flex items-center justify-center text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-ink-200"
 						>
 							{#if project.imagePath}
 								<img

@@ -64,6 +64,25 @@
 						delay: 0.2
 					});
 				}
+
+				const heroPanel = heroRef?.querySelector<HTMLElement>('[data-hero-card]');
+				if (heroPanel) {
+					gsap.from(heroPanel, {
+						opacity: 0,
+						y: 28,
+						scale: 0.98,
+						duration: 1,
+						ease: 'power3.out',
+						delay: 0.18
+					});
+					gsap.to(heroPanel, {
+						y: -10,
+						duration: 3.3,
+						repeat: -1,
+						yoyo: true,
+						ease: 'sine.inOut'
+					});
+				}
 			}, heroRef);
 		});
 
@@ -90,12 +109,19 @@
 			</h1>
 			<p class="max-w-xl text-lg text-ink-200" data-hero>{data.siteSettings.heroSubheadline}</p>
 			<div class="flex flex-wrap gap-4" data-hero>
-				<a class="nav-pill border-ink-100 bg-ink-900 text-white" href="/work">View the work</a>
+				<a class="nav-pill cta-primary border-ink-100 bg-ink-900 text-white" href="/work">View the work</a>
 				<a class="nav-pill" href="/contact">Start a project</a>
 			</div>
+			{#if data.stackItems.length}
+				<div class="flex flex-wrap gap-2" data-hero>
+					{#each data.stackItems.slice(0, 3) as item}
+						<span class="badge badge-glow" data-stat>{item.label}</span>
+					{/each}
+				</div>
+			{/if}
 		</div>
 		{#if data.siteSettings.heroHighlightsTitle || data.siteSettings.heroHighlightsBody || data.siteSettings.heroNoteTitle || data.siteSettings.heroNoteBody}
-			<div class="glass space-y-6 p-8">
+			<div class="glass space-y-6 p-8" data-hero-card>
 				{#if data.siteSettings.heroHighlightsTitle || data.siteSettings.heroHighlightsBody}
 					<div class="space-y-2">
 						<p class="text-xs font-semibold uppercase tracking-[0.2em] text-ink-200">
@@ -158,7 +184,7 @@
 				<MotionReveal delay={0.08 * index} className="card flex h-full flex-col justify-between">
 					<div class="space-y-3">
 						<div
-							class="aspect-[4/3] rounded-2xl border border-ink-200/20 bg-white/5 shadow-soft flex items-center justify-center text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-ink-200"
+							class="media-frame aspect-[4/3] rounded-2xl border border-ink-200/20 bg-white/5 shadow-soft flex items-center justify-center text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-ink-200"
 						>
 							{#if project.imagePath}
 								<img
