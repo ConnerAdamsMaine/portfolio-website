@@ -19,6 +19,7 @@ SvelteKit + Tailwind portfolio site with an admin UI, PostgreSQL-first storage (
 - `PG_POOL_MAX`: Maximum PostgreSQL connection pool size
 - `REDIS_URL`: Redis connection string for distributed rate limiting and caching
 - `REDIS_PREFIX`: Redis key prefix (default `portfolio:`)
+- `BODY_SIZE_LIMIT`: Node adapter max request body size (default `512K`, set `8M` for admin uploads)
 - `DB_PATH`: SQLite file path for fallback/local data storage (relative to project root if not absolute)
 - `DB_AUTO_SEED`: Auto-create/seed tables on startup (`true` in dev by default; set `false` in production)
 - `ADMIN_SESSION_SECRET`: HMAC secret for admin sessions
@@ -49,7 +50,7 @@ SvelteKit + Tailwind portfolio site with an admin UI, PostgreSQL-first storage (
 
 ## Build & Run (Node Adapter)
 1. `npm run build`
-2. `node build/index.js`
+2. `npm run start`
 
 You can also use `npm run preview` to test the production build locally.
 
